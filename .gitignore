@@ -1,2 +1,18 @@
 Data/
 /Manifest.toml
+*.dta
+*.out
+/Other Programs/GNR/Figure_1/Monte_Carlo_Data/*.dta
+/Other Programs/GNR/Table_1/Monte_Carlo_Data/*.dta
+/Other Programs/GNR/Tables_2_3/Chile/311/*.dta
+/Other Programs/GNR/Tables_2_3/Chile/321/*.dta
+/Other Programs/GNR/Tables_2_3/Chile/322/*.dta
+/Other Programs/GNR/Tables_2_3/Chile/331/*.dta
+/Other Programs/GNR/Tables_2_3/Chile/381/*.dta
+/Other Programs/GNR/Tables_2_3/Chile/Industry/*.dta
+/Other Programs/GNR/Tables_2_3/Colombia/311/*.dta
+/Other Programs/GNR/Tables_2_3/Colombia/321/*.dta
+/Other Programs/GNR/Tables_2_3/Colombia/322/*.dta
+/Other Programs/GNR/Tables_2_3/Colombia/331/*.dta
+/Other Programs/GNR/Tables_2_3/Colombia/381/*.dta
+/Other Programs/GNR/Tables_2_3/Colombia/Industry/*.dta
