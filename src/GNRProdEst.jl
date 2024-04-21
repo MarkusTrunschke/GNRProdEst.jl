@@ -11,7 +11,7 @@
 
 module GNRProdEst
     # Load dependencies
-    using DataFrames, Revise
+    using DataFrames, Revise, NonlinearSolve
 
     ## Include other files defining functions
     include("data_prep.jl") # Set up inputs to be in the correct for for the internals to work with

@@ -11,11 +11,13 @@
 /**  converge, the initial values can be changed.	   	   **/
 /**********************************************************/ {
 * Get starting values from linear regression
-regress si k i kk ii ki if si~=. & k~=. & i~=.
-predict crap if si~=. & k~=. & i~=.
-replace crap = crap - _b[_cons]
-egen mcrap = min(crap)
+regress si k i kk ii ki if si~=. & k~=. & i~=. // Linear regression of what we want to get non-linearly
+predict crap if si~=. & k~=. & i~=.  // Get fitted values
+replace crap = crap - _b[_cons] // Substract constant
+egen mcrap = min(crap) // Take the minimum
 scalar ncrap=mcrap
+scalar list ncrap
+pause
 drop crap mcrap
 scalar ncrap=-ncrap + 0.1
 
