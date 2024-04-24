@@ -14,16 +14,18 @@
 regress si k i kk ii ki if si~=. & k~=. & i~=. // Linear regression of what we want to get non-linearly
 predict crap if si~=. & k~=. & i~=.  // Get fitted values
 replace crap = crap - _b[_cons] // Substract constant
+cap drop ncrap
 egen mcrap = min(crap) // Take the minimum
 scalar ncrap=mcrap
 scalar list ncrap
-pause
 drop crap mcrap
-scalar ncrap=-ncrap + 0.1
+scalar ncrap=-ncrap + 0.1 // Take negative of the minimum and add 0.1. No idea why but ok
 
 #delimit;
 nl ( si = ln({g0=ncrap} + {gk=_b[k]}*k + {gi=_b[i]}*i +
    {gkk=_b[kk]}*kk + {gki=_b[ki]}*ki + {gii=_b[ii]}*ii) ) if si~=. & k~=. & i~=.;
+   
+exit
 #delimit cr
 predict ielas if k~=. & si~=. & i~=.
 predict eg if k~=. & si~=. & i~=., resid
