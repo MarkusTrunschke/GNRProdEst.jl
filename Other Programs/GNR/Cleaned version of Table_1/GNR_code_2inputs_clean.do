@@ -11,22 +11,27 @@
 /**  converge, the initial values can be changed.	   	   **/
 /**********************************************************/ {
 * Get starting values from linear regression
+cap drop crap
 regress si k i kk ii ki if si~=. & k~=. & i~=. // Linear regression of what we want to get non-linearly
 predict crap if si~=. & k~=. & i~=.  // Get fitted values
 replace crap = crap - _b[_cons] // Substract constant
-cap drop ncrap
+cap drop mcrap 
 egen mcrap = min(crap) // Take the minimum
 scalar ncrap=mcrap
-scalar list ncrap
 drop crap mcrap
 scalar ncrap=-ncrap + 0.1 // Take negative of the minimum and add 0.1. No idea why but ok
 
+scalar list ncrap
+
 #delimit;
-nl ( si = ln({g0=ncrap} + {gk=_b[k]}*k + {gi=_b[i]}*i +
-   {gkk=_b[kk]}*kk + {gki=_b[ki]}*ki + {gii=_b[ii]}*ii) ) if si~=. & k~=. & i~=.;
+nl ( si = ln({g0=ncrap} + {gk=_b[k]}*k + {gi=_b[i]}*i + {gkk=_b[kk]}*kk + {gki=_b[ki]}*ki + {gii=_b[ii]}*ii)) if si~=. & k~=. & i~=. , trace;
    
-exit
 #delimit cr
+exit
+cap drop e_si
+gen e_si = exp(si)
+regress e_si k i kk ki ii
+
 predict ielas if k~=. & si~=. & i~=.
 predict eg if k~=. & si~=. & i~=., resid
 replace eg=-eg

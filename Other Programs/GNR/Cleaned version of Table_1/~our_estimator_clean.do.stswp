@@ -27,6 +27,7 @@ pause on
 // 	gen ki=k*i
 //
 // 	save "C:\Users\marku\Documents\GNRProdEst\Other Programs\GNR\Cleaned version of Table_1\cd_data_500.dta", replace
+	export delimited "C:\Users\marku\Documents\GNRProdEst\Other Programs\GNR\Cleaned version of Table_1\cd_data_500.csv", replace
 }
 use "C:\Users\marku\Documents\GNRProdEst\Other Programs\GNR\Cleaned version of Table_1\cd_data_500.dta", clear
 

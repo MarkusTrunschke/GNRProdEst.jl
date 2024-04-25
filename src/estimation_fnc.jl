@@ -1,5 +1,5 @@
 ## General estimation command
-function GNRProd(;data::DataFrame, output::Symbol, flex_inputs::Union{Symbol,Array{Symbol}}, fixed_inputs::Union{Symbol,Array{Symbol}}, opts::Dict)
+function GNRProd(;data::DataFrame, output::Symbol, flex_inputs::Union{Symbol,Array{Symbol}}, fixed_inputs::Union{Symbol,Array{Symbol}}, opts::Dict = Dict())
     
     ## Run data preparation to ensure inputs are working with internals
     est_df, all_var_symbols, all_input_symbols = prep_data(data, output = output, flex_inputs = flex_inputs, fixed_inputs = fixed_inputs)
@@ -11,21 +11,37 @@ function GNRProd(;data::DataFrame, output::Symbol, flex_inputs::Union{Symbol,Arr
     return sol
 end
 ## First stage function
-function GNRFirstStage(;est_df, output::Symbol, flex_inputs::Union{Symbol,Array{Symbol}}, fixed_inputs::Union{Symbol,Array{Symbol}}, share::Symbol, all_input_symbols::Array{Symbol}, opts::Dict=Dict("fs_series_order" => 2))
+function GNRFirstStage(;est_df, output::Symbol, flex_inputs::Union{Symbol,Array{Symbol}}, fixed_inputs::Union{Symbol,Array{Symbol}}, share::Symbol, all_input_symbols::Array{Symbol}, opts::Dict=Dict())
+    
+    # Get additional options right
+    opts = opts_filler(opts)
 
     # Get Taylor polynomials
     taylor_input_symbols = taylor_series!(data = est_df, var_names = all_input_symbols, order = opts["fs_series_order"])
 
-    # Get starting values for NLLS (Follow replication code of GNR for now)
-    γ_start = fs_startvalues(data = est_df, share_var = share, input_var_symbols = taylor_input_symbols)
-
     # Run first stage estimation
-    fs_res = fs_est(data=est_df, share_var=share, input_var_symbols=taylor_input_symbols, starting_values=γ_start,  method = opts["fs_method"])
-
-    # ## Print results
-    # GNRPrintres_fs()
-
+    fs_res = fs_est(data=est_df, share_var=share, input_var_symbols=taylor_input_symbols, method = opts["fs_method"], print_res = opts["fs_print_results"], opts = opts)
+    
     return fs_res
+end
+
+##
+function opts_filler(opts::Dict)
+    
+    if "fs_series_order" ∉ keys(opts)
+        opts["fs_series_order"] = 2
+    end
+    if "fs_print_starting_values" ∉ keys(opts)
+        opts["fs_print_starting_values"] = false
+    end
+    if "fs_print_results" ∉ keys(opts)
+        opts["fs_print_results"] = false
+    end
+    if "fs_method" ∉ keys(opts)
+        opts["fs_method"] = "OLS"
+    end
+
+    return opts
 end
 
 ## Taylor Approximation function
@@ -86,8 +102,8 @@ function taylor_series!(;data::DataFrame, var_names::Vector{Symbol}, order::Int)
 end
 
 ## Start values calculation function for the first stage (Currently only an OLS as in GNR 2020))
-function fs_startvalues(;data::DataFrame, share_var::Symbol, input_var_symbols::Array{Symbol})
-
+function fs_startvalues(;data::DataFrame, share_var::Symbol, input_var_symbols::Array{Symbol}, print_res::Bool)
+    
     # Define matrices for OLS
     Y = data[:,share_var]
     X = hcat(data.constant, Matrix(data[:,input_var_symbols]))
@@ -95,31 +111,63 @@ function fs_startvalues(;data::DataFrame, share_var::Symbol, input_var_symbols::
     # Calculate OLS
     startvals = vec(inv(X'*X)*X'*Y)
 
+    # GNR make a correction to the constant (this is probably because the constant is so strongly negative for their example that the ln(Xγ) returns NaNs because of negative Xγ-values)
+    startvals[1] = 0.1 - minimum((X*startvals) .- startvals[1])
+
+    # Print results if specified
+    if print_res == true
+        print_tab = hcat(vcat([:constant], input_var_symbols), startvals)
+        header = (["Variable", "Value"])
+
+        println("First stage starting values:")
+        pretty_table(print_tab, header = header)
+    end
+
     # Return result
     return startvals
 end
 
 ## First stage estimation function
-function fs_est(; data::DataFrame, share_var::Symbol, input_var_symbols::Array{Symbol}, starting_values::Array, method::String = NLLS)
+function fs_est(; data::DataFrame, share_var::Symbol, input_var_symbols::Array{Symbol}, method::String, print_res::Bool, opts::Dict)
+    
     if method == "OLS" # The GNR replication code uses a non-linear regression of the shares onto the natural logarithm of the taylor polynomials for the first stage. However, this seems unnecessary. I cannot see any reason not to simply take the exponential of the shares onto the taylor polynomials. This is a linear regression estimated by OLS. It is much faster to calculate and much more robust because it is not a numerical optimization but has a simple analytical solution.
         # Define matrices for OLS
         Y = exp.(data[:,share_var])
         X = hcat(data.constant, Matrix(data[:,input_var_symbols]))
 
         # Calculate OLS
-        fs_res = vec(inv(X'*X)*X'*Y)
+        fs_results = vec(inv(X'*X)*X'*Y)
 
     elseif method == "NLLS"
 
-        @. model(x, p) = p[1] * x
+        # Get starting values for NLLS (Follow replication code of GNR for now)
+        γ_start = fs_startvalues(data = data, share_var = share_var, input_var_symbols = input_var_symbols, print_res = opts["fs_print_starting_values"])
 
-        fs_res = curve_fit(model, x, y, [1.0])
+        # Get matrices
+        X = Matrix(hcat(data.constant, Matrix(data[:,input_var_symbols])))
+        Y = data[:, share_var]
 
+        # Define model
+        model(X, γ) = log.(X*γ)
+
+        # Solve for parameters
+        fs_res = curve_fit(model, X, Y, γ_start)
+
+        fs_results = fs_res.param
 
     end
 
+    # Print results if user wants that
+    if print_res == true
+        print_tab = hcat(vcat([:constant], input_var_symbols), fs_results)
+        header = (["Variable", "Value"])
+
+        println("First stage results:")
+        pretty_table(print_tab, header = header)
+    end
+
     # Return solution vector
-    return fs_res
+    return fs_results
 end
 
 

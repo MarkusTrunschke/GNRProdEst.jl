@@ -1,7 +1,7 @@
 *CD VERSION
 clear all
 set more off
-
+pause on
 /* Get a subset of the Monte Carlo data */ {
 // 	infile id time h kt mt yt using "C:\Users\marku\Documents\GNRProdEst\Other Programs\GNR\Cleaned version of Table_1\cd_data.out", clear
 // 	keep if id <= 500
