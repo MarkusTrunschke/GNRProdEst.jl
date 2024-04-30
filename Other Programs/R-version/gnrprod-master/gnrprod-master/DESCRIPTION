@@ -1,0 +1,21 @@
+Package: gnrprod
+Title: Estimates Gross Output Functions
+Version: 1.1.2
+Authors@R: 
+    person(given = "David J.",
+           family = "Jin",
+           role = c("aut", "cre"),
+           email = "jindavid@sas.upenn.edu")
+Author: David J. Jin [aut, cre]
+Maintainer: David J. Jin <jindavid@sas.upenn.edu>
+Description: Estimation of gross output production functions and productivity in the presence of numerous fixed (nonflexible) and a single flexible input using the nonparametric identification strategy specified in Gandhi, Navarro, and Rivers (2020) <doi:10.1086/707736>. Monte Carlo evidence from the paper demonstrates high performance in estimating production function elasticities.
+License: GPL-3
+Encoding: UTF-8
+LazyData: true
+RoxygenNote: 7.2.3
+Imports: base, data.table, stats
+Depends: R (>= 2.10)
+NeedsCompilation: no
+Packaged: 2023-06-11 23:26:58 UTC; David Jin
+Repository: CRAN
+Date/Publication: 2023-06-12 16:40:02 UTC

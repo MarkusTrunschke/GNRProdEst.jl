@@ -1,17 +1,17 @@
 ## General estimation command
-function GNRProd(;data::DataFrame, output::Symbol, flex_inputs::Union{Symbol,Array{Symbol}}, fixed_inputs::Union{Symbol,Array{Symbol}}, opts::Dict = Dict())
+function GNRProd(;data::DataFrame, output::Symbol, flex_input::Symbol, fixed_inputs::Union{Symbol,Array{Symbol}}, opts::Dict = Dict())
     
     ## Run data preparation to ensure inputs are working with internals
-    est_df, all_var_symbols, all_input_symbols = prep_data(data, output = output, flex_inputs = flex_inputs, fixed_inputs = fixed_inputs)
+    est_df, all_var_symbols, all_input_symbols = prep_data(data, output = output, flex_input = flex_input, fixed_inputs = fixed_inputs)
 
     ## Run first stage estimation
-    sol = GNRFirstStage(;est_df, output = output, flex_inputs = flex_inputs, fixed_inputs = fixed_inputs, share = :share_m_y, all_input_symbols = all_input_symbols, opts = opts)
+    sol = GNRFirstStage(est_df = est_df, output = output, flex_input = flex_input, fixed_inputs = fixed_inputs, share = :share_flex_y, all_input_symbols = all_input_symbols, opts = opts)
 
 
     return sol
 end
 ## First stage function
-function GNRFirstStage(;est_df, output::Symbol, flex_inputs::Union{Symbol,Array{Symbol}}, fixed_inputs::Union{Symbol,Array{Symbol}}, share::Symbol, all_input_symbols::Array{Symbol}, opts::Dict=Dict())
+function GNRFirstStage(;est_df, output::Symbol, flex_input::Union{Symbol,Array{Symbol}}, fixed_inputs::Union{Symbol,Array{Symbol}}, share::Symbol, all_input_symbols::Array{Symbol}, opts::Dict=Dict())
     
     # Get additional options right
     opts = opts_filler(opts)
@@ -20,12 +20,15 @@ function GNRFirstStage(;est_df, output::Symbol, flex_inputs::Union{Symbol,Array{
     taylor_input_symbols = taylor_series!(data = est_df, var_names = all_input_symbols, order = opts["fs_series_order"])
 
     # Run first stage estimation
-    fs_res = fs_est(data=est_df, share_var=share, input_var_symbols=taylor_input_symbols, method = opts["fs_method"], print_res = opts["fs_print_results"], opts = opts)
+    γ_dash = fs_est(data=est_df, share_var=share, input_var_symbols=taylor_input_symbols, method = opts["fs_method"], print_res = opts["fs_print_results"], opts = opts)
     
-    return fs_res
+    # Calculate some quantities
+    flex_elas, ln_int_G_I, ϵ = fs_predictions(data = est_df, share_var = share, flex_input = flex_input, input_var_symbols=taylor_input_symbols, γ_dash = γ_dash, output = output)
+
+    return flex_elas, ln_int_G_I, est_df[!,share], ϵ # return fs_res
 end
 
-##
+## Auxiliary function to fill up options that were not given in opts dictionary
 function opts_filler(opts::Dict)
     
     if "fs_series_order" ∉ keys(opts)
@@ -118,7 +121,6 @@ function fs_startvalues(;data::DataFrame, share_var::Symbol, input_var_symbols::
     if print_res == true
         print_tab = hcat(vcat([:constant], input_var_symbols), startvals)
         header = (["Variable", "Value"])
-
         println("First stage starting values:")
         pretty_table(print_tab, header = header)
     end
@@ -148,7 +150,9 @@ function fs_est(; data::DataFrame, share_var::Symbol, input_var_symbols::Array{S
         Y = data[:, share_var]
 
         # Define model
-        model(X, γ) = log.(X*γ)
+        function model(X, γ)
+            return log.(X*γ)
+        end
 
         # Solve for parameters
         fs_res = curve_fit(model, X, Y, γ_start)
@@ -168,6 +172,55 @@ function fs_est(; data::DataFrame, share_var::Symbol, input_var_symbols::Array{S
 
     # Return solution vector
     return fs_results
+end
+
+## Function to calculate quantities in the first stage (after estimation)
+function fs_predictions(;data::DataFrame, ln_share_var::Symbol, flex_input::Symbol, input_var_symbols::Array{Symbol}, γ_dash::Vector{Float64}, output)
+    # Define matrices for OLS
+    ln_share = data[:,ln_share_var]
+    X = hcat(data.constant, Matrix(data[:,input_var_symbols]))
+    
+    # Calculate flexible input elasticity
+    # data.flex_elas = X*γ
+    data.ln_D_E = X*γ_dash # GNR and R-version of GNR calculate this without correcting for the constant. Follow them
+
+    # Calculate first stage residual ϵ
+    data.ϵ = ln_D_E .- ln_share  # GNR and R-version of GNR calculate the residual like Xβ-Y instaed of  Y-Xβ. This is because of equation (11). There it is share = D_E - ϵ but we estimate D_E + ϵ. So take the negative of ϵ
+    
+    # Calculate constant E
+    E = mean(exp.(ϵ))
+
+    γ = γ_dash ./ E # Below Eq. (21)
+
+    data.flex_elas = exp.(ln_D_E) / E # Eq. (14)
+    
+    # Calculate the integral (This part does the same as the R command (gnrflex) but differs from GNR's replication code. They never correct their coefficients for E.)
+    # Get degree of intermediate input
+    flex_degree = get_flex_degree(flex_input, vcat(:constant, input_var_symbols))
+    γ_flex = γ ./ flex_degree[2,:] # Calculate first part of first/second equation on p.2995
+    data.int_flex = X*γ_flex .* data[! ,flex_input] # Multiply by flex input to add the + 1
+
+    # Calculate \mathcal(Y) (From eq. (16) and hint on p.2995)
+    data.weird_Y = data[!, output] - int_flex - ϵ
+
+    # Return results
+    return nothing
+end
+
+# Function to determine the intermediate input variable degree of the polynomial approximation based on the internal naming scheme
+function get_flex_degree(flex_input::Symbol, all_var_symbols::Array{Symbol})
+    
+    # Initalize array
+    flex_degree_list = Array{Union{Symbol,Int}}[]
+
+    for sym in all_var_symbols # Iterate over all symbols of the Taylor polynomials
+        parts = split(string(sym), "_")
+        count_flex = count(isequal(string(flex_input)), parts) # Check for each part if it matches the flexible input symbol and count the occurances
+        push!(flex_degree_list, [sym, count_flex + 1])
+    end
+
+    # Return list of symbols with count of flexible input occurances
+    return hcat(flex_degree_list...)
 end
 
 
