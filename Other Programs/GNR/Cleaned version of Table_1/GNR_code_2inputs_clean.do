@@ -52,7 +52,7 @@ foreach var of varlist g0-gii {
 clear matrix
 
 * Calculate the integral now
-gen integ_G_I = g0+gk*k+gkk*kk + (gi*i+gki*ki)/2 + gii*ii/3
+gen integ_G_I = g0+gk*k+gkk*kk + (gi*i+gki*ki)/2 + gii*ii/3 // They never correct the coefficients. This is different than in the paper and in R-version of the command. I do not think this is correct.
 replace integ_G_I=integ_G_I*i // Because in equation it says m^(r+1) but we did not add the + 1 in the part above
 gen vg = yg - eg - integ_G_I
 exit

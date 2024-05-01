@@ -2,13 +2,15 @@ using GNRProdEst
 using Test
 using CSV
 using DataFrames
+using Statistics
 
 @testset "GNRProdEst.jl" begin
 
         # Get data and prepare for tests
         # data = CSV.read("C:/Users/marku/Documents/GNRProdEst/Other Programs/R-version/cd_data_500.csv", DataFrame)
         data = CSV.read("C:/Users/marku/Documents/GNRProdEst/Other Programs/GNR/Cleaned version of Table_1/cd_data_500.csv", DataFrame)
-        data[!, :ln_share_m_y] = log.(select(data_mis, :M)[:,1] ./ select(data_mis, :Y)[:,1]) # Need to do the [:,1] b/c need to convert it to a vector before adding in to a column...
+        data[!, :share_m_y] = select(data, :i_level)[:,1] ./ select(data, :yg_level)[:,1] # Need to do the [:,1] b/c need to convert it to a vector before adding in to a column...
+        data[!, :ln_share_m_y] = log.(select(data, :i_level)[:,1] ./ select(data, :yg_level)[:,1]) # Need to do the [:,1] b/c need to convert it to a vector before adding in to a column...
         data.constant = ones(size(data)[1])
 
         data_mis = allowmissing(data)
@@ -18,17 +20,14 @@ using DataFrames
                      "fs_print_starting_values" => true,
                      "fs_print_results" => true)
 
+
+        GNRProdEst.GNRProd(data = data_mis, output = :yg, flex_input = :i, fixed_inputs = :k, opts = opts)
+
+        
+
         data = CSV.read("C:/Users/marku/Documents/GNRProdEst/Other Programs/R-version/Columbia_311.csv", DataFrame)
         data.constant = ones(size(data)[1])
 
-        gnr_FS <- gnrflex(output = "RGO",
-                   fixed = c("L", "K"),
-                   flex = "RI",
-                   share = "share",
-                   id = "id",
-                   time = "year",
-                   data = Columbia_311,
-                   control = list(degree = 2, maxit = 2000))
         # GNRProdEst.GNRFirstStage(est_df = data, output = :Y, flex_inputs = :M, fixed_inputs = :K, share = :ln_share_m_y, all_input_symbols = [:K, :M], opts = opts)
         flex_elas, ln_int_G_I, share, ϵ = GNRProdEst.GNRFirstStage(est_df = data, output = :yg, flex_input = :i, fixed_inputs = :k, share = :si, all_input_symbols = [:k, :i], opts = opts);
         # flex_elas, ln_int_G_I, share, ϵ = GNRProdEst.GNRFirstStage(est_df = data, output = :RGO, flex_input = :RI, fixed_inputs = [:L, :K], share = :share, all_input_symbols = [:L, :K, :RI], opts = opts);
