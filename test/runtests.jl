@@ -21,15 +21,22 @@ using Statistics
                      "fs_print_results" => true)
 
 
-        GNRProdEst.GNRProd(data = data_mis, output = :yg, flex_input = :i, fixed_inputs = :k, opts = opts)
+        fes_res, result_df = GNRProdEst.GNRProd(data = data_mis, output = :yg, flex_input = :i, fixed_inputs = :k, id = :id, time=:time, opts = opts)
 
-        
+        γ_dash_GNR = [0.6518793, 0.0034517, -0.0011976, 0.0013776, -0.0046622, -0.0000291]
+        γ_dash_R = [6.519479e-01, 3.464846e-03, -1.196053e-03, 1.398264e-03, -4.688621e-03, -5.307226e-05]
+
+        result_df = select(result_df, Not(:flex_elas2))
+        γ, γ_flex, E = GNRProdEst.fes_predictions!(data = result_df, ln_share_flex_y_var = :ln_share_flex_y, flex_input = :i, input_var_symbols=fes_res["taylor_series"], γ_dash = γ_dash_R, output = :yg)
+
+
+
 
         data = CSV.read("C:/Users/marku/Documents/GNRProdEst/Other Programs/R-version/Columbia_311.csv", DataFrame)
         data.constant = ones(size(data)[1])
 
         # GNRProdEst.GNRFirstStage(est_df = data, output = :Y, flex_inputs = :M, fixed_inputs = :K, share = :ln_share_m_y, all_input_symbols = [:K, :M], opts = opts)
-        flex_elas, ln_int_G_I, share, ϵ = GNRProdEst.GNRFirstStage(est_df = data, output = :yg, flex_input = :i, fixed_inputs = :k, share = :si, all_input_symbols = [:k, :i], opts = opts);
+        flex_elas, ln_int_G_I, share, ϵ = GNRProdEst.GNRFirstStage(est_df = data, output = :yg, flex_input = :i, fixed_inputs = :k, share = :si, all_input_symbols = [:k, :i], id = :id, time = :time, opts = opts);
         # flex_elas, ln_int_G_I, share, ϵ = GNRProdEst.GNRFirstStage(est_df = data, output = :RGO, flex_input = :RI, fixed_inputs = [:L, :K], share = :share, all_input_symbols = [:L, :K, :RI], opts = opts);
 
         # Test data preperation (drop missings and add column)
@@ -39,6 +46,10 @@ using Statistics
         GNRProd(;data::DataFrame, output::Symbol, flex_inputs::Union{Symbol,Array{Symbol}}, fixed_inputs::Union{Symbol,Array{Symbol}}, opts::Dict)
     
 end
+
+
+
+
 
 
 data = CSV.read("C:/Users/marku/Documents/GNRProdEst/Other Programs/GNR/Cleaned version of Table_1/cd_data_500.csv", DataFrame)

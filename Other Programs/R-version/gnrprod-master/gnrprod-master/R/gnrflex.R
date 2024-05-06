@@ -105,11 +105,11 @@ gnrflex <- function(output, fixed, flex, share, id, time, data, control) {
                                 share = share, control = ctrl)
 
   coef <- share_reg[[1]]
-  i_elas_lvl <- pred_fs(coef, poly_input)
-  errors <- i_elas_lvl - share
+  i_elas <- log(pred_fs(coef, poly_input))
+  errors <- i_elas - share
   colnames(errors) <- "fs_residuals"
   mean_exp_err <- mean(exp(errors))
-  i_elas <- exp(i_elas_lvl - log(mean_exp_err))
+  i_elas <- exp(i_elas - log(mean_exp_err))
   colnames(i_elas) <- colnames(flex)
   gamma <- as.matrix(coef / mean_exp_err)
   flex_gamma <- gamma / gamma_denom
@@ -119,11 +119,7 @@ gnrflex <- function(output, fixed, flex, share, id, time, data, control) {
   big_Y <- as.matrix(output - errors - integ_G_I)
   colnames(big_Y) <- "big_Y"
 
-  fs_elas <- list("flex_elas_lvl" = i_elas_lvl,
-                  "flex_gamma" = flex_gamma,
-                  "mean_exp_err" = mean_exp_err,
-                  "flex_elas" = i_elas,
-                  "integ_G_I" = integ_G_I,
+  fs_elas <- list("flex_elas" = i_elas,
                   "coefficients" = coef,
                   "residuals" = errors,
                   "SSR" = c(share_reg$SSR),
@@ -140,7 +136,7 @@ gnrflex <- function(output, fixed, flex, share, id, time, data, control) {
                  "degree" = ctrl$degree,
                  "fixed_names" = colnames(fixed))
 
-  fs_return <- list("elas" = fs_elas, "arg" = fs_arg, "control" = ctrl, "integ_G_I" = integ_G_I)
+  fs_return <- list("elas" = fs_elas, "arg" = fs_arg, "control" = ctrl)
   class(fs_return) <- "gnrflex"
   return(fs_return)
 }

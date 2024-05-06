@@ -53,7 +53,7 @@ GNR_MC_data$ln_m_y_share <- log(GNR_MC_data$i_level / GNR_MC_data$yg_level) # no
 test = m_y_share <- GNR_MC_data$M / GNR_MC_data$Y
 
 # GNR use batches of 500 firms in their MC. Do the same
-GNR_MC_sample <- GNR_MC_data[GNR_MC_data$ID < 500, ]
+GNR_MC_sample <- GNR_MC_data[GNR_MC_data$id < 500, ]
 
 # Run GNR estimator
 gnr_est <- gnrprod(data = GNR_MC_sample,
@@ -66,22 +66,35 @@ gnr_est <- gnrprod(data = GNR_MC_sample,
                    ss_control = list(method = "BFGS", trace = 1, maxit = 2000)) # nolint
 summary(gnr_est) # Converges and gives decent results
 
-gnr_FS <- gnrflex(output = "y",
+gnr_FS <- gnrflex(output = "yg",
                    fixed = "k",
-                   flex = "m",
-                   id = "ID",
-                   time = "Year",
-                   share = "m_y_share",
+                   flex = "i",
+                   id = "id",
+                   time = "time",
+                   share = "si",
                    data = GNR_MC_sample,
                    control = list(degree = 2, maxit = 2000))
+
+
+gnr_SES <- gnriv(output = "yg",
+                   fixed = "k",
+                   flex = "i",
+                   id = "id",
+                   time = "time",
+                   share = "si",
+                   data = GNR_MC_sample,
+                   control = list(degree = 2, maxit = 2000))
+
+gnr_SES <- gnriv(object = gnr_FS)
 
 fs_elas_list = gnr_FS$elas
 fs_arg_list = gnr_FS$arg
 
-int_G_I2 = gnr_FS$integ_G_I
+big_Y = fs_arg_list$big_Y
+epsilon = fs_elas_list$residuals
 
-flex_elas = flex_elas_list$flex_elas
-fs_coefs = flex_elas_list$coefficients
+flex_elas = fs_elas_list$flex_elas
+fs_coefs = fs_elas_list$coefficients
 ######################### Now try my generated data #########################
 test_data = read.csv(file = "C:/Users/marku/Documents/GNRProdEst/Data/test_data_CD_K_L_M.csv") # nolint
 

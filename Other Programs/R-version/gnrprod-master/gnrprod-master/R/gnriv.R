@@ -86,6 +86,8 @@ gnriv <- function(object, control, ...) {
     }
   })
   pred <- do.call(cbind, pred)
+  print(pred[1,])
+  print(all_input[1,])
 
   id <- object$arg$id
   time <- object$arg$time

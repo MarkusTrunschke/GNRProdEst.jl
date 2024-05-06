@@ -29,11 +29,14 @@ nl ( si = ln({g0=ncrap} + {gk=_b[k]}*k + {gi=_b[i]}*i + {gkk=_b[kk]}*kk + {gki=_
 #delimit cr
 
 cap drop ielas eg
-predict ielas if k~=. & si~=. & i~=.
-predict eg if k~=. & si~=. & i~=., resid
+predict ielas if k~=. & si~=. & i~=. // = ln(g0 + gk*k + gi*i + gkk*kk + gki*ki + gii*ii)
+predict eg if k~=. & si~=. & i~=., resid // = si - ln(g0 + gk*k + gi*i + gkk*kk + gki*ki + gii*ii)
 
-replace eg=-eg
-replace ielas=exp(ielas)
+replace eg=-eg // Because model is actually y = x*b - e but we estimate y = x*b + e
+replace ielas=exp(ielas) // Because the predict command gives fitted values for the model y = ln(x*gamma) but we need it without the log (see eq. (21))
+
+
+exit
 * The next part only puts the coefficients into the dataset as variables
 mat beta=e(b)
 svmat double beta
@@ -52,7 +55,7 @@ foreach var of varlist g0-gii {
 clear matrix
 
 * Calculate the integral now
-gen integ_G_I = g0+gk*k+gkk*kk + (gi*i+gki*ki)/2 + gii*ii/3 // They never correct the coefficients. This is different than in the paper and in R-version of the command. I do not think this is correct.
+gen integ_G_I = g0+gk*k+gkk*kk + (gi*i+gki*ki)/2 + gii*ii/3 // They never correct the coefficients for the constant. This is different than in the paper and in R-version of the command. I do not think this is correct.
 replace integ_G_I=integ_G_I*i // Because in equation it says m^(r+1) but we did not add the + 1 in the part above
 gen vg = yg - eg - integ_G_I
 exit
