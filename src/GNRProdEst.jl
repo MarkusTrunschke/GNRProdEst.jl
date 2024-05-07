@@ -11,11 +11,12 @@
 
 module GNRProdEst
     # Load dependencies
-    using DataFrames, Revise, NonlinearSolve, GLM, LsqFit, PrettyTables, Statistics
+    using DataFrames, Revise, NonlinearSolve, GLM, LsqFit, PrettyTables, Statistics, ShiftedArrays
 
     ## Include other files defining functions
     include("data_prep.jl") # Set up inputs to be in the correct for for the internals to work with
     include("estimation_fnc.jl") # Function to estimate the production function
+    include("aux_fnc.jl") # All auxiliary function definitions
 
     export Nothing
 

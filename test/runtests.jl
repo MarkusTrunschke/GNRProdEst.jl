@@ -21,14 +21,13 @@ using Statistics
                      "fs_print_results" => true)
 
 
-        fes_res, result_df = GNRProdEst.GNRProd(data = data_mis, output = :yg, flex_input = :i, fixed_inputs = :k, id = :id, time=:time, opts = opts)
+        fes_res, ses_res = GNRProdEst.GNRProd(data = data_mis, output = :yg, flex_input = :i, fixed_inputs = :k, id = :id, time=:time, opts = opts)
 
         γ_dash_GNR = [0.6518793, 0.0034517, -0.0011976, 0.0013776, -0.0046622, -0.0000291]
         γ_dash_R = [6.519479e-01, 3.464846e-03, -1.196053e-03, 1.398264e-03, -4.688621e-03, -5.307226e-05]
 
         result_df = select(result_df, Not(:flex_elas2))
         γ, γ_flex, E = GNRProdEst.fes_predictions!(data = result_df, ln_share_flex_y_var = :ln_share_flex_y, flex_input = :i, input_var_symbols=fes_res["taylor_series"], γ_dash = γ_dash_R, output = :yg)
-
 
 
 
@@ -50,19 +49,15 @@ end
 
 
 
+opts = Dict( "fes_series_order" => 2,
+             "fes_method" => "NLLS", # OLS is experimental. It gives (almost) the same results but the residual is different
+             "fes_print_starting_values" => true,
+             "fes_print_results" => true,
+             "ses_series_order" => 2)
+
+GNRProdEst.GNRSecondStage(est_df = data, fixed_inputs = [:k], called_from_GNRProd = true, fes_returns = fes_res, opts = opts)
 
 
-data = CSV.read("C:/Users/marku/Documents/GNRProdEst/Other Programs/GNR/Cleaned version of Table_1/cd_data_500.csv", DataFrame)
-
-est_df, all_var_symbols, all_input_symbols = GNRProdEst.prep_data(data, output = :yg , flex_input = :i, fixed_inputs = :k)
-
-data[!, :share_flex_y] = data.i_level ./ data.yg_level # Need to do the [:,1] b/c need to convert it to a vector before adding in to a column...
-data[!, :ln_share_flex_y] = data.i .- data.yg # Need to do the [:,1] b/c need to convert it to a vector before adding in to a column...
-data.constant = ones(size(data)[1])
-
-coefs = [ 6.519479e-01, -4.688618e-03, -5.307394e-05, 1.398266e-03, 3.464840e-03,  -1.196054e-03]
-
-input_var_symbols = [:k, :k_k, :k_i, :i, :i_i]
 
 
-flex_elas[1:6]
+new_df = GNRProdEst.panel_lag(;data = data, id = :id, time = :time, variable = :k, lag_prefix = "lag_", lags = 1, drop_missings = false)

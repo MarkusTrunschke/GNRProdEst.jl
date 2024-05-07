@@ -39,10 +39,12 @@
 
 
 gnriv <- function(object, control, ...) {
+  # Check if object has correct class
   if (attr(object, "class") != "gnrflex") {
     stop("object must be of class gnrflex")
   }
   
+  # Hand over controls if any
   ctrl <- gnriv.control()
   if (!missing(control)) {
     control <- as.list(control)
@@ -85,7 +87,7 @@ gnriv <- function(object, control, ...) {
       return(all_input[, i, drop = FALSE])
     }
   })
-  pred <- do.call(cbind, pred)
+  pred <- do.call(cbind, pred) # Get columns corresponding to polynomias from fixed inputs
   print(pred[1,])
   print(all_input[1,])
 
@@ -94,7 +96,8 @@ gnriv <- function(object, control, ...) {
   big_Y <- object$arg$big_Y
   errors <- object$elas$residuals
 
-  constant_reg <- stats::lm(big_Y ~ as.matrix(pred))
+  # Get starting values
+  constant_reg <- stats::lm(big_Y ~ as.matrix(pred)) # Regress weird_Y on fixed input polynomials. Not sure if he adds a constant. GNR do and I follow them for now.
   coefficients <- stats::coef(constant_reg)[2:(ncol(pred) + 1)]
   names(coefficients) <- colnames(pred)
   
@@ -102,9 +105,9 @@ gnriv <- function(object, control, ...) {
   colnames(fixed_base)[1:2] <- c("id", "time")
   fixed_base <- fixed_base[order(fixed_base$id, fixed_base$time), ]
   fixed_lag <- fixed_base[, data.table::shift(.SD, n = 1), by = id,
-                          .SDcols = 3:ncol(fixed_base), drop = FALSE]
+                          .SDcols = 3:ncol(fixed_base), drop = FALSE] # Get lags of the fixed inputs.
   
-  complete_obs <- stats::complete.cases(cbind(fixed_base, fixed_lag))
+  complete_obs <- stats::complete.cases(cbind(fixed_base, fixed_lag)) # Drop those who have missings b/c of lags
   
   fixed_base <- as.matrix(fixed_base)[complete_obs, -1:-2, drop = FALSE]
   fixed_lag <- as.matrix(fixed_lag)[complete_obs, -1, drop = FALSE]
@@ -113,13 +116,15 @@ gnriv <- function(object, control, ...) {
   fixed_base <- fixed_base[, -c(ncol(fixed_base))]
   big_Y_lag <- fixed_lag[, ncol(fixed_lag)]
   fixed_lag <- fixed_lag[, -c(ncol(fixed_lag))]
-
+  
+  # GMM starts here
   constant_gmm <- stats::optim(par = coefficients, fn = constant_moments,
                                data = fixed_base, big_Y_base = big_Y_base,
                                big_Y_lag = big_Y_lag, lag_data = fixed_lag,
                                degree = degree_w, method = method,
                                control = optim.control, ...)
 
+  # Not sure why he does this. Probably to fill up the return vector if optim.control did not specify anything that deviates from default.
   opt_ctrl <- list(trace = 0, fnscale = 1,
                    parscale = rep.int(1, length(coefficients)),
                    ndeps = rep.int(1e-3, length(coefficients)),

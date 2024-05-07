@@ -76,11 +76,8 @@ matrix test2 = e(b)
 matrix test3 = test2[1,1..2]
 matrix test3[1,1] = test2[1,"k"]
 matrix test3[1,2] = test2[1,"kk"]
-// matrix drop test2
+matrix drop test2
 
-mat list test2 
-mat list test3
-exit
 gmm gmm_prod_2inputs if vg!=. & k!=. & vg_1!=. & k_1!=., one nequations(2) parameters (ak akk) from(test3) winitial(identity) rhs(vg k kk vg_1 k_1 kk_1)
 mat beta=e(b)
 svmat double beta

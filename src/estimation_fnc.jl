@@ -6,10 +6,16 @@ function GNRProd(;data::DataFrame,
                   ln_share_flex_y_var::Symbol = :NotDefinedByUser, 
                   id::Symbol, 
                   time::Symbol, 
-                  fes_starting_values::Array{Union{Float,Int,Missing}} = [Missing],
-                  ses_starting_values::Array{Union{Float,Int,Missing}} = [Missing],
+                  fes_starting_values::Vector = [missing],
+                  ses_starting_values::Vector = [missing],
                   opts::Dict = Dict())
     
+    # Clean inputs to be of the correct types
+    fixed_inputs = GNR_input_cleaner!(fixed_inputs = fixed_inputs, stage = 0)
+
+    # Throw error if user messed up
+    error_throw_fnc(data,output,flex_input,fixed_inputs,ln_share_flex_y_var,id,time,fes_starting_values,ses_starting_values,opts)
+
     # Get additional options right
     opts = opts_filler!(opts)
 
@@ -20,12 +26,12 @@ function GNRProd(;data::DataFrame,
     fes_returns = GNRFirstStage(est_df = est_df, output = output, flex_input = flex_input, fixed_inputs = fixed_inputs, ln_share_flex_y_var = ln_share_flex_y_var, all_input_symbols = all_input_symbols, starting_values = fes_starting_values, opts = opts)
 
     ## Run second stage estimation
-    ses_returns = GNRSecondStage(est_df = est_df, fes_returns = fes_returns, called_from_GNRProd = true)
+    ses_returns = GNRSecondStage(est_df = est_df, fes_returns = fes_returns, fixed_inputs = fixed_inputs, starting_values = ses_starting_values, called_from_GNRProd = true, opts = opts)
 
     return fes_returns, ses_returns
 end
 ## First stage function
-function GNRFirstStage(;est_df, output::Symbol, flex_input::Union{Symbol,Array{Symbol}}, fixed_inputs::Union{Symbol,Array{Symbol}}, ln_share_flex_y_var::Symbol, all_input_symbols::Array{Symbol}, starting_values::Array{Union{Float,Int,Missing}}, opts::Dict=Dict())
+function GNRFirstStage(;est_df, output::Symbol, flex_input::Union{Symbol,Array{Symbol}}, fixed_inputs::Union{Symbol,Array{Symbol}}, ln_share_flex_y_var::Symbol, all_input_symbols::Array{Symbol}, starting_values::Vector, opts::Dict=Dict())
     
     # Get Taylor polynomials
     taylor_input_symbols = taylor_series!(data = est_df, var_names = all_input_symbols, order = opts["fes_series_order"])
@@ -48,124 +54,8 @@ function GNRFirstStage(;est_df, output::Symbol, flex_input::Union{Symbol,Array{S
     return return_elements
 end
 
-## Auxiliary function to fill up options that were not given in opts dictionary
-function opts_filler!(opts::Dict)
-    
-    if "fes_series_order" ∉ keys(opts)
-        opts["fes_series_order"] = 2
-    end
-    if "fes_print_starting_values" ∉ keys(opts)
-        opts["fes_print_starting_values"] = false
-    end
-    if "fes_print_results" ∉ keys(opts)
-        opts["fes_print_results"] = false
-    end
-    if "fes_method" ∉ keys(opts)
-        opts["fes_method"] = "OLS"
-    end
-    if "ses_print_starting_values" ∉ keys(opts)
-        opts["ses_print_starting_values"] = false
-    end
-    return opts
-end
-
-## Taylor Approximation function
-function taylor_series!(;data::DataFrame, var_names::Vector{Symbol}, order::Int)
-
-    if order > 4
-        throw(error("Taylor series order is too large. The program only supports Taylor series until order 4"))
-    end
-
-    nvar = length(var_names)
-
-    taylor_var_names::Array{Symbol} = []
-
-    # Generate all variables
-    for j = 1 : nvar
-        push!(taylor_var_names, var_names[j]) # Add variable name to taylor variable symbol list
-
-        # If order of taylor approximation is larger than 1
-        if order > 1
-            for i = j : nvar
-                varn = Symbol(String(var_names[j])*"_"*String(var_names[i])) # Generate variable name of new variable
-                push!(taylor_var_names, varn) # Add variable name to taylor variable symbol list
-                if varn ∈ names(data) # Check if variable is already in dataset. If yes: Drop it
-                    data = select(data, Not(varn))
-                end
-                data[:, varn] = data[:, var_names[j]] .* data[:,var_names[i]] # Add variable to dataset
-
-                # If order of taylor approximation is larger than 2
-                if order > 2
-                    for u = i : nvar
-                        varn = Symbol(String(var_names[j])*"_"*String(var_names[i])*"_"*String(var_names[u])) # generate variable name of new variable
-                        push!(taylor_var_names, varn) # Add variable name to taylor variable symbol list
-                        if varn ∈ names(data) # Check if variable is already in dataset. If yes: Drop it
-                            data = select(data, Not(varn))
-                        end
-                        data[:,varn] = data[:,var_names[j]].*data[:,var_names[i]].*data[:,var_names[u]]
-
-                        # If order of taylor approximation is larger than 3
-                        if order > 3
-                            for r = u : nvar
-                                varn = Symbol(String(var_names[j])*"_"*String(var_names[i])*"_"*String(var_names[u])*"_"*String(var_names[r])) # generate variable name of new variable
-                                push!(taylor_var_names, varn) # Add variable name to taylor variable symbol list
-                                if varn ∈ names(data) # Check if variable is already in dataset. If yes: Drop it
-                                    data = select(data, Not(varn))
-                                end
-                                data[:,varn] = data[:,var_names[j]].*data[:,var_names[i]].*data[:,var_names[u]].*data[:,var_names[r]]
-
-                            end
-                        end
-                    end
-                end
-            end
-        end
-    end
-
-    # Return result
-    return taylor_var_names
-end
-
-## Start values calculation function for the first stage (Currently only an OLS as in GNR 2020))
-function startvalues(;data::DataFrame, Y_var::Symbol, X_vars::Union{Symbol,Array{Symbol}}, user_start_vals::Array{Union{Float,Int,Missing}}, stage::String, print_res::Bool)
-    
-    if user_start_vals != [Missing] # If user specified starting values
-
-        # Check dimensions and throw an error if they do not match
-        if size(X_vars) != size(user_start_vals)
-            throw("You specified either too many or not enough "*stage*" starting values!")
-
-        else
-            startvals = user_start_vals
-        end
-
-    else # If user did not specify starting values
-
-        # Define matrices for OLS
-        Y = data[:, Y_var]
-        X = hcat(data.constant, Matrix(data[:,X_vars]))
-
-        # Calculate OLS
-        startvals = vec(inv(X'*X)*X'*Y)
-
-        # GNR make a correction to the constant (this is probably because the constant is so strongly negative for their example that the ln(Xγ) returns NaNs because of negative Xγ-values)
-        startvals[1] = 0.1 - minimum((X*startvals) .- startvals[1])
-    end
-
-    # Print results if specified
-    if print_res == true
-        print_tab = hcat(vcat([:constant], input_var_symbols), startvals)
-        header = (["Variable", "Value"])
-        println("First stage starting values:")
-        pretty_table(print_tab, header = header)
-    end
-
-    # Return result
-    return startvals
-end
-
 ## First stage estimation function
-function fes_est(; data::DataFrame, ln_share_flex_y_var::Symbol, input_var_symbols::Array{Symbol}, method::String, print_res::Bool, starting_values::Array{Union{Float,Int,Missing}}, opts::Dict)
+function fes_est(; data::DataFrame, ln_share_flex_y_var::Symbol, input_var_symbols::Array{Symbol}, method::String, print_res::Bool, starting_values::Vector, opts::Dict)
     
     if method == "OLS" # The GNR replication code uses a non-linear regression of the shares onto the natural logarithm of the taylor polynomials for the first stage. However, this seems unnecessary. I cannot see any reason not to simply take the exponential of the shares onto the taylor polynomials. This is a linear regression estimated by OLS. It is much faster to calculate and much more robust because it is not a numerical optimization but has a simple analytical solution.
         # Define matrices for OLS
@@ -178,8 +68,8 @@ function fes_est(; data::DataFrame, ln_share_flex_y_var::Symbol, input_var_symbo
     elseif method == "NLLS"
 
         # Get starting values for NLLS (Follow replication code of GNR for now)
-        γ_start = fes_startvalues(data = data, ln_share_flex_y_var = ln_share_flex_y_var, input_var_symbols = input_var_symbols, user_start_vals = starting_values, stage = "first stage", print_res = opts["fes_print_starting_values"])
-
+        γ_start = startvalues(data = data, Y_var = ln_share_flex_y_var, X_vars = input_var_symbols, user_start_vals = starting_values, stage = "first stage", print_res = opts["fes_print_starting_values"])
+    
         # Get matrices
         X = Matrix(hcat(data.constant, Matrix(data[:,input_var_symbols])))
         Y = data[:, ln_share_flex_y_var]
@@ -248,48 +138,44 @@ function fes_predictions!(;data::DataFrame, ln_share_flex_y_var::Symbol, flex_in
     return γ, γ_flex, E
 end
 
-# Function to determine the intermediate input variable degree of the polynomial approximation based on the internal naming scheme
-function get_flex_degree(flex_input::Symbol, all_var_symbols::Array{Symbol})
-    
-    # Initalize array
-    flex_degree_list = Array{Union{Symbol,Int}}[]
-
-    for sym in all_var_symbols # Iterate over all symbols of the Taylor polynomials
-        parts = split(string(sym), "_")
-        count_flex = count(isequal(string(flex_input)), parts) # Check for each part if it matches the flexible input symbol and count the occurances
-        push!(flex_degree_list, [sym, count_flex + 1])
-    end
-
-    # Return list of symbols with count of flexible input occurances
-    return hcat(flex_degree_list...)
-end
-
-
-
 # Second stage estimation function
-function GNRSecondStage(;est_df::DataFrame, fixed_inputs::Union{Array{Symbol},Symbol}, called_from_GNRProd::Bool, fes_returns::Dict = Dict(), opts::Dict())
+function GNRSecondStage(;est_df::DataFrame, fixed_inputs::Union{Array{Symbol},Symbol}, called_from_GNRProd::Bool, starting_values::Vector , fes_returns::Dict = Dict(), opts::Dict= Dict())
     
+    # Clean inputs to be of the correct types
+    fixed_inputs = GNR_input_cleaner!(fixed_inputs = fixed_inputs, stage = 2)
+
     # Get starting values for GMM (Follow replication code of GNR for now)
     taylor_fixed = Array{Symbol}[]
     if called_from_GNRProd == true # If called from within GNRProd, taylor polynomials already exist. Use pure fixed input polynomials (as in GNR replication code)
-        if typeof(fixed_inputs) == Symbol && opts["fes_series_order"] == 1 # If there is only one fixed input and the taylor order is one, there is no need to select the correct taylor polynomials
+        if typeof(fixed_inputs) == Symbol && opts["ses_series_order"] == 1 # If there is only one fixed input and the taylor order is one, there is no need to select the correct taylor polynomials
             taylor_fixed = fixed_inputs
         else
-            taylor_series_checked = check_array_string_only_substrings(s_vec = string.(fes_returns["taylor_series"]), strings_to_check = string.(fixed_inputs))
-            taylor_fixed = Symbol.(taylor_series_checked[findall(res[:, 2]), :][:,1])
+            s_vec = string.(fes_returns["taylor_series"])
+            strings_to_check = string.(fixed_inputs)
+            taylor_series_checked = check_array_string_only_substrings(s_vec = s_vec, strings_to_check = strings_to_check)
+            taylor_fixed = Symbol.(taylor_series_checked[findall(taylor_series_checked[:, 2]), :][:,1])
         end
     else # If not called from within GNRProd, generate taylor polynomials from fixed inputs
         taylor_fixed = taylor_series!(data = est_df, var_names = fixed_inputs, order = opts["ses_series_order"])
     end
     
-    ses_starting_values = startvalues(data = data, Y_var = :weird_Y, X_vars = taylor_fixed, user_start_vals = ses_starting_values, stage = "secod stage", print_res =  opts["ses_print_starting_values"])
+    ses_starting_values = startvalues(data = est_df, Y_var = :weird_Y, X_vars = taylor_fixed, user_start_vals = starting_values, stage = "secod stage", print_res =  opts["ses_print_starting_values"])
 
     # Run estimation
-    ses_results = ses_est(;data::DataFrame, ses_starting_values = ses_starting_values)
+    # ses_results = ses_est(;data::DataFrame, starting_values = ses_starting_values)
 
+    return ses_starting_values
 end
 
-# Second stage estimation function
-function ses_est(;data::DataFrame)
+# # Second stage estimation function
+# function ses_est(;data::DataFrame, starting_values::Vector)
     
-end
+#     # Run GMM estimation
+#     gmm_res = ses_gmm(data)
+
+#     return gmm_res
+# end
+
+# function ses_gmm(data::DataFrame)
+    
+# end
