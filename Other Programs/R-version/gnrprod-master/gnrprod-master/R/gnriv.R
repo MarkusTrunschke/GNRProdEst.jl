@@ -88,8 +88,8 @@ gnriv <- function(object, control, ...) {
     }
   })
   pred <- do.call(cbind, pred) # Get columns corresponding to polynomias from fixed inputs
-  print(pred[1,])
-  print(all_input[1,])
+  # print(pred[1,])
+  # print(all_input[1,])
 
   id <- object$arg$id
   time <- object$arg$time
@@ -98,6 +98,9 @@ gnriv <- function(object, control, ...) {
 
   # Get starting values
   constant_reg <- stats::lm(big_Y ~ as.matrix(pred)) # Regress weird_Y on fixed input polynomials. Not sure if he adds a constant. GNR do and I follow them for now.
+  
+  print(summary(constant_reg))
+
   coefficients <- stats::coef(constant_reg)[2:(ncol(pred) + 1)]
   names(coefficients) <- colnames(pred)
   
@@ -117,6 +120,8 @@ gnriv <- function(object, control, ...) {
   big_Y_lag <- fixed_lag[, ncol(fixed_lag)]
   fixed_lag <- fixed_lag[, -c(ncol(fixed_lag))]
   
+  print(coefficients)
+
   # GMM starts here
   constant_gmm <- stats::optim(par = coefficients, fn = constant_moments,
                                data = fixed_base, big_Y_base = big_Y_base,

@@ -73,7 +73,7 @@ function opts_filler!(opts::Dict)
 end
 
 ## Function that checks a string to only contain defined substrings
-function check_str_only_def_substr(s::String, strings_to_check::Union{Vector{String},Vector{Char},String})
+function check_str_only_def_substr(s::String, strings_to_check::Union{Vector,String,Char})
     parts = split(s, "_")
 
     check_vec = falses(length(parts))
@@ -93,7 +93,7 @@ function check_str_only_def_substr(s::String, strings_to_check::Union{Vector{Str
 end
 
 ## Function that iterates over an array of strings and checks if it only contains defined substrings (or "_")
-function check_array_string_only_substrings(;s_vec::Vector{String}, strings_to_check::Union{Vector{String},Vector{Char},String})
+function check_array_string_only_substrings(;s_vec::Vector{String}, strings_to_check::Union{Vector,String,Char})
     check_res = falses(length(s_vec))
     j = 1
     for stri in s_vec
@@ -161,10 +161,14 @@ function startvalues(;data::DataFrame, Y_var::Symbol, X_vars::Union{Symbol,Array
 end
 
 ## Taylor Approximation function
-function taylor_series!(;data::DataFrame, var_names::Vector{Symbol}, order::Int)
+function taylor_series!(;data::DataFrame, var_names::Union{Vector{Symbol},Symbol}, order::Int)
 
     if order > 4
         throw(error("Taylor series order is too large. The program only supports Taylor series until order 4"))
+    end
+
+    if typeof(var_names) == Symbol
+        var_names = [var_names]
     end
 
     nvar = length(var_names)
@@ -218,36 +222,106 @@ function taylor_series!(;data::DataFrame, var_names::Vector{Symbol}, order::Int)
 end
 
 ## Function that generates lagged values in a panel
-# Second panel lag function
-function panel_lag(;data::DataFrame, id::Symbol, time::Symbol, variable::Symbol, lag_prefix::String = "l_", lags::Int = 1, drop_missings::Bool = false)
+# Panel lag function with return df
+function panel_lag(;data::DataFrame, id::Symbol, time::Symbol, variable::Union{Symbol,Vector{Symbol}}, lag_prefix::String = "lag_", lags::Int = 1, drop_missings::Bool = false, force::Bool = false)
+    
+    # Clean input
+    if typeof(variable) == Symbol
+        variable = [variable]
+    end
+
+    # Sort data and create new df. This is the only difference to panel_lag!()
+    new_df = copy(sort(data, [id, time]))
+
+    # Drop lag columns if they already exist if force is true. Throw error if not.
+    for var in variable
+        if string(lag_prefix*string(var)) ∈ names(data)
+            if force == true
+                new_df = new_df[!, Not(Symbol(lag_prefix*string(var)))]
+            else
+                throw("Specified name for lag of variable already present in specified dataframe. Either set force = true, choose difference lag variable name, or rename the column.")
+            end
+        end
+    end
+
+    # Do the actual lagging
+    lagging_that_panel!(data = new_df, id = id, time = time, variable = variable, lag_prefix = lag_prefix, lags = lags, drop_missings = drop_missings)
+    
+    # Return resulting Dataframe
+    return new_df
+end
+
+# Panel lag function manipulating the original df
+function panel_lag!(;data::DataFrame, id::Symbol, time::Symbol, variable::Union{Array{Symbol},Symbol}, lag_prefix::String = "lag_", lags::Int = 1, drop_missings::Bool = false, force::Bool = false)
+    
+    # Clean input
+    if typeof(variable) == Symbol
+        variable = [variable]
+    end
+
+    # Drop lag columns if they already exist if force is true. Throw error if not.
+    for var in variable
+        if string(lag_prefix*string(var)) ∈ names(data)
+            if force == true
+                data = data[!, Not(Symbol(lag_prefix*string(var)))]
+            else
+                throw("Specified name for lag of variable already present in specified dataframe. Either set force = true, choose difference lag variable name, or rename the column.")
+            end
+        end
+    end
+
+    println("Variables after cleaning")
+    println(names(data))
 
     # Sort data
-    sdf = copy(sort(data, [id, time]))
+    sort!(data, [id, time])
+
+    # # Do the actual lagging
+    lagging_that_panel!(data = data, id = id, time = time, variable = variable, lag_prefix = lag_prefix, lags = lags, drop_missings = drop_missings)
+
+    # Return resulting Dataframe
+    return nothing
+end
+
+function lagging_that_panel!(;data::DataFrame, id::Symbol, time::Symbol, variable::Union{Symbol,Vector{Symbol}}, lag_prefix::String = "lag_", lags::Int = 1, drop_missings::Bool = false)
 
     # Generate lagged values per id and select all but the original variable (causes problems in join). The ShiftedArrays.lag function names the lagged column itself with variable_lag
-    sdf = select(transform(groupby(sdf, id), variable => ShiftedArrays.lag, time => ShiftedArrays.lag), [Symbol(string(variable)*"_lag"), time, Symbol(string(time)*"_lag"), id])
+    df_lag = select(data, [id, time, variable...])
+
+    lag_variables::Vector{Symbol} = []
+
+    # Lag all variables
+    for lag_var in [time, variable...]
+        transform!(groupby(df_lag, id), lag_var => ShiftedArrays.lag)
+
+        push!(lag_variables, Symbol(string(lag_var) .* "_lag"))
+    end
 
     # Drop missings in lagged time variable we just generated
-    sdf = dropmissing(sdf, Symbol(string(time)*"_lag"))
+    dropmissing!(df_lag, lag_variables)
 
     # Check if lag is actually only the expected lag apart
-    sdf[!,Symbol(string(variable)*"_lag")] = ifelse.(sdf[!,time] .- lags .== sdf[!,Symbol(string(time)*"_lag")], sdf[!,Symbol(string(variable)*"_lag")], missing)
+    for var in lag_variables[2:end]
+        df_lag[!, var] = ifelse.(df_lag[!,time] .- lags .== df_lag[!,Symbol(string(time)*"_lag")], df_lag[!,var], missing)
+    end
 
-
-
-    sdf = select(sdf, Not(string(time)*"_lag")) # Drop lagged time variable from df
+    select!(df_lag, [time, id, lag_variables[2:end]...]) # Drop lagged time variable from df
 
     # Combine lagged variable with original data and sort it.
-    newdata = sort(leftjoin(data, sdf, on = [id, time]), [:id, :time])
+    sort!(leftjoin!(data, df_lag, on = [id, time]), [id, time])
 
     # Drop missings in lagged variable we just generated if user wants to
     if drop_missings == true
-        newdata = dropmissing(newdata, Symbol(string(variable)*"_lag"))
+        dropmissing!(data, lag_variables[2:end])
     end
     
     # Rename variable to user-specified name
-    rename!(newdata, Symbol(string(variable)*"_lag") => Symbol(lag_prefix*string(variable)))
+    for var in variable
+        rename!(data, Symbol(string(var)*"_lag") => Symbol(lag_prefix*string(var)))
+    end
+
+    print(names(data))
 
     # Return result
-    return newdata
+    return nothing
 end

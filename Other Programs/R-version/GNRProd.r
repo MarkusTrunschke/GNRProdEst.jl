@@ -66,17 +66,13 @@ gnr_est <- gnrprod(data = GNR_MC_sample,
                    ss_control = list(method = "BFGS", trace = 1, maxit = 2000)) # nolint
 summary(gnr_est) # Converges and gives decent results
 
+GNR_MC_sample$big_Y = gnr_FS$arg$big_Y
+GNR_MC_sample$errors <- gnr_FS$elas$residuals
+
+
+write.csv(GNR_MC_sample, "C:/Users/marku/Documents/GNRProdEst/Other Programs/GNR/Cleaned version of Table_1/cd_data_500_w_fs.csv")
+
 gnr_FS <- gnrflex(output = "yg",
-                   fixed = "k",
-                   flex = "i",
-                   id = "id",
-                   time = "time",
-                   share = "si",
-                   data = GNR_MC_sample,
-                   control = list(degree = 2, maxit = 2000))
-
-
-gnr_SES <- gnriv(output = "yg",
                    fixed = "k",
                    flex = "i",
                    id = "id",

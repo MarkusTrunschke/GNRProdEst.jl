@@ -36,7 +36,6 @@ replace eg=-eg // Because model is actually y = x*b - e but we estimate y = x*b 
 replace ielas=exp(ielas) // Because the predict command gives fitted values for the model y = ln(x*gamma) but we need it without the log (see eq. (21))
 
 
-exit
 * The next part only puts the coefficients into the dataset as variables
 mat beta=e(b)
 svmat double beta
@@ -58,7 +57,7 @@ clear matrix
 gen integ_G_I = g0+gk*k+gkk*kk + (gi*i+gki*ki)/2 + gii*ii/3 // They never correct the coefficients for the constant. This is different than in the paper and in R-version of the command. I do not think this is correct.
 replace integ_G_I=integ_G_I*i // Because in equation it says m^(r+1) but we did not add the + 1 in the part above
 gen vg = yg - eg - integ_G_I
-exit
+
 tset id time
 gen vg_1=L.vg
 gen k_1=L.k

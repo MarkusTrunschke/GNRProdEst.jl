@@ -28,10 +28,10 @@ function GNRProd(;data::DataFrame,
     ## Run second stage estimation
     ses_returns = GNRSecondStage(est_df = est_df, fes_returns = fes_returns, fixed_inputs = fixed_inputs, starting_values = ses_starting_values, called_from_GNRProd = true, opts = opts)
 
-    return fes_returns, ses_returns
+    return fes_returns, ses_returns, est_df
 end
 ## First stage function
-function GNRFirstStage(;est_df, output::Symbol, flex_input::Union{Symbol,Array{Symbol}}, fixed_inputs::Union{Symbol,Array{Symbol}}, ln_share_flex_y_var::Symbol, all_input_symbols::Array{Symbol}, starting_values::Vector, opts::Dict=Dict())
+function GNRFirstStage(;est_df, output::Symbol, flex_input::Union{Symbol,Array{Symbol}}, fixed_inputs::Union{Symbol,Array{Symbol}}, ln_share_flex_y_var::Symbol, all_input_symbols::Array{Symbol}, starting_values::Vector = [missing], opts::Dict=Dict())
     
     # Get Taylor polynomials
     taylor_input_symbols = taylor_series!(data = est_df, var_names = all_input_symbols, order = opts["fes_series_order"])
@@ -139,10 +139,15 @@ function fes_predictions!(;data::DataFrame, ln_share_flex_y_var::Symbol, flex_in
 end
 
 # Second stage estimation function
-function GNRSecondStage(;est_df::DataFrame, fixed_inputs::Union{Array{Symbol},Symbol}, called_from_GNRProd::Bool, starting_values::Vector , fes_returns::Dict = Dict(), opts::Dict= Dict())
-    
+function GNRSecondStage(;est_df::DataFrame, fixed_inputs::Union{Array{Symbol},Symbol}, id::Symbol, time::Symbol, called_from_GNRProd::Bool = false, starting_values::Vector = [missing], fes_returns::Dict = Dict(), opts::Dict= Dict())
+
     # Clean inputs to be of the correct types
     fixed_inputs = GNR_input_cleaner!(fixed_inputs = fixed_inputs, stage = 2)
+
+    # Get additional options right
+    if called_from_GNRProd == false
+        opts = opts_filler!(opts)
+    end
 
     # Get starting values for GMM (Follow replication code of GNR for now)
     taylor_fixed = Array{Symbol}[]
@@ -152,6 +157,7 @@ function GNRSecondStage(;est_df::DataFrame, fixed_inputs::Union{Array{Symbol},Sy
         else
             s_vec = string.(fes_returns["taylor_series"])
             strings_to_check = string.(fixed_inputs)
+
             taylor_series_checked = check_array_string_only_substrings(s_vec = s_vec, strings_to_check = strings_to_check)
             taylor_fixed = Symbol.(taylor_series_checked[findall(taylor_series_checked[:, 2]), :][:,1])
         end
@@ -162,20 +168,39 @@ function GNRSecondStage(;est_df::DataFrame, fixed_inputs::Union{Array{Symbol},Sy
     ses_starting_values = startvalues(data = est_df, Y_var = :weird_Y, X_vars = taylor_fixed, user_start_vals = starting_values, stage = "secod stage", print_res =  opts["ses_print_starting_values"])
 
     # Run estimation
-    # ses_results = ses_est(;data::DataFrame, starting_values = ses_starting_values)
+    ses_results = ses_est(;data = est_df, starting_values = ses_starting_values, id = id, time = time, taylor_fixed = taylor_fixed)
 
-    return ses_starting_values
+    return ses_results
 end
 
 # # Second stage estimation function
-# function ses_est(;data::DataFrame, starting_values::Vector)
+function ses_est(;data::DataFrame, id::Symbol, time::Symbol, weird_Y_var::Symbol = :weird_Y, taylor_fixed::Vector{Symbol}, starting_values::Vector)
     
-#     # Run GMM estimation
-#     gmm_res = ses_gmm(data)
+    # Calculate some lags
+    panel_lag!(data = data, id = id, time = time, variable = [weird_Y_var, taylor_fixed...], lag_prefix = "lag_", lags = 1, drop_missings = false, force = true)
 
-#     return gmm_res
-# end
+    # Run GMM estimation
+    gmm_res = ses_gmm(data, "lag_" .* string.(taylor_fixed))
 
-# function ses_gmm(data::DataFrame)
-    
-# end
+    return gmm_res
+end
+
+# 2nd stage GMM function
+function ses_gmm(data::DataFrame, α::Union{Vector, Symbol}, lag_taylor_fixed, )
+    w = data.weird_Y .- data[!, taylor_fixed] * α  # - ak*k - ak2*k2
+    w_1  = data.lag_weird_Y - data[!, lag_taylor_fixed] * α # ak*k_1-ak2*k2_1
+	w2_1 = w_1^2 # w_1*w_1 
+	w3_1 = w_1^3 # w2_1*w_1
+
+    # OLS
+    X = hcat(w_1, w2_1, w3_1)
+    coefs = vec(inv(X'*X)*X'*w)
+    residuals = w - x*coefs
+
+    # Calculate moments
+    m_vec = data[!, taylor_fixed] * residuals
+    # m1 = k*residuals
+    # m2 = k2*residuals
+
+    return w
+end

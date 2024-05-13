@@ -21,7 +21,7 @@ using Statistics
                      "fs_print_results" => true)
 
 
-        fes_res, ses_res = GNRProdEst.GNRProd(data = data_mis, output = :yg, flex_input = :i, fixed_inputs = :k, id = :id, time=:time, opts = opts)
+        fes_res, ses_res, est_df = GNRProdEst.GNRProd(data = data_mis, output = :yg, flex_input = :i, fixed_inputs = :k, id = :id, time=:time, opts = opts)
 
         γ_dash_GNR = [0.6518793, 0.0034517, -0.0011976, 0.0013776, -0.0046622, -0.0000291]
         γ_dash_R = [6.519479e-01, 3.464846e-03, -1.196053e-03, 1.398264e-03, -4.688621e-03, -5.307226e-05]
@@ -55,9 +55,18 @@ opts = Dict( "fes_series_order" => 2,
              "fes_print_results" => true,
              "ses_series_order" => 2)
 
-GNRProdEst.GNRSecondStage(est_df = data, fixed_inputs = [:k], called_from_GNRProd = true, fes_returns = fes_res, opts = opts)
+fes_res, est_df = GNRProdEst.GNRFirstStage(est_df = data, output = :yg, flex_input = :i, fixed_inputs = :k, ln_share_flex_y_var = :si, all_input_symbols = [:k, :i], opts = opts);
+
+
+# Get fs results from R for comparison
+data_R = CSV.read("C:/Users/marku/Documents/GNRProdEst/Other Programs/GNR/Cleaned version of Table_1/cd_data_500_w_fs.csv", DataFrame)
+data_R.weird_Y = data_R.big_Y
+data_R.constant = ones(length(data_R.id))
+GNRProdEst.GNRSecondStage(est_df = data_R, id = :id, time = :time, fixed_inputs = :k, starting_values = [missing], opts = opts)
 
 
 
+GNRProdEst.panel_lag!(data = data_R2, id = :id, time = :time, variable = [:k, :i], lag_prefix = "lag_", lags = 1, drop_missings = false, force = true)
+new_df = GNRProdEst.panel_lag(data = data_R2, id = :id, time = :time, variable = [:k, :i], lag_prefix = "lag_", lags = 1, drop_missings = false, force = true)
 
-new_df = GNRProdEst.panel_lag(;data = data, id = :id, time = :time, variable = :k, lag_prefix = "lag_", lags = 1, drop_missings = false)
+
