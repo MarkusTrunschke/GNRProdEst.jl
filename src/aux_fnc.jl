@@ -29,8 +29,8 @@ function error_throw_fnc(data::DataFrame,
     ln_share_flex_y_var::Symbol, 
     id::Symbol, 
     time::Symbol, 
-    fes_starting_values::Vector,
-    ses_starting_values::Vector,
+    fes_starting_values::Vector{<:Number},
+    ses_starting_values::Vector{<:Number},
     opts::Dict)
 
     # Check if variables are actually in DataFrame
@@ -121,7 +121,7 @@ function get_flex_degree(flex_input::Symbol, all_var_symbols::Array{Symbol})
 end
 
 ## Start values calculation function for the first stage (Currently only an OLS as in GNR 2020))
-function startvalues(;data::DataFrame, Y_var::Symbol, X_vars::Union{Symbol,Array{Symbol}}, user_start_vals::Vector, stage::String, print_res::Bool)
+function startvalues(;data::DataFrame, Y_var::Symbol, X_vars::Union{Symbol,Array{Symbol}}, user_start_vals::Vector{<:Union{Missing, Number}}, stage::String, print_res::Bool)
     
     if any(ismissing.(user_start_vals)) || size(user_start_vals) != (1,) # If user did not specify starting values
 
@@ -221,6 +221,50 @@ function taylor_series!(;data::DataFrame, var_names::Union{Vector{Symbol},Symbol
     return taylor_var_names
 end
 
+## Polynomial generation function
+function polynomial_fnc!(data::DataFrame, variable::Symbol, degree::Int; name::Symbol = variable, force::Bool = false)
+    
+    # Start polynomial names list
+    polynomials::Vector = [variable]
+
+    # Calculate polynomials
+    for i in 2:degree
+        
+        # Define polynomial column name
+        new_sym = Symbol(name, "_", i)
+
+        # Check if conflicting columns exist
+        if force == false && string(new_sym) ∈ names(data)
+            throw("Column name "*string(new_sym)*" already exists in dataframe. Either specify a different column symbol using the name option, rename conflicting columns in the dataframe, or use force option.")
+        end
+
+        # Calculate polynomial and put it in dataframe
+        data[!, new_sym] = data[!, variable] .^ i
+
+        # Add variable name to list
+        push!(polynomials, new_sym)
+    end
+
+    return polynomials, data
+    
+end
+
+## If there are already prepared columns in the dataframe and their values just need to be updated, jump in here. This is the fast version with no dynamic allocations at runtime.
+function polynomial_fnc_fast!(poly_mat::Array{<:Number}, degree::Int; par_cal::Bool = false)
+    # Compute polynomial columns (each column of the matrix represents the i's polynomial of the first column)
+    if par_cal == false
+        for i in 2:degree
+            poly_mat[:,i] .= @view(poly_mat[:,1]) .^ i
+        end
+    else
+        Threads.@threads for i in 2:degree
+            poly_mat[:,i] .= @view(poly_mat[:,1]) .^ i
+        end
+    end
+
+    return poly_mat 
+end
+
 ## Function that generates lagged values in a panel
 # Panel lag function with return df
 function panel_lag(;data::DataFrame, id::Symbol, time::Symbol, variable::Union{Symbol,Vector{Symbol}}, lag_prefix::String = "lag_", lags::Int = 1, drop_missings::Bool = false, force::Bool = false)
@@ -270,24 +314,20 @@ function panel_lag!(;data::DataFrame, id::Symbol, time::Symbol, variable::Union{
         end
     end
 
-    println("Variables after cleaning")
-    println(names(data))
-
     # Sort data
     sort!(data, [id, time])
 
     # # Do the actual lagging
-    lagging_that_panel!(data = data, id = id, time = time, variable = variable, lag_prefix = lag_prefix, lags = lags, drop_missings = drop_missings)
+    data = lagging_that_panel!(data = data, id = id, time = time, variable = variable, lag_prefix = lag_prefix, lags = lags, drop_missings = drop_missings)
 
-    # Return resulting Dataframe
-    return nothing
+    return data
 end
 
 function lagging_that_panel!(;data::DataFrame, id::Symbol, time::Symbol, variable::Union{Symbol,Vector{Symbol}}, lag_prefix::String = "lag_", lags::Int = 1, drop_missings::Bool = false)
 
     # Generate lagged values per id and select all but the original variable (causes problems in join). The ShiftedArrays.lag function names the lagged column itself with variable_lag
     df_lag = select(data, [id, time, variable...])
-
+    
     lag_variables::Vector{Symbol} = []
 
     # Lag all variables
@@ -297,9 +337,9 @@ function lagging_that_panel!(;data::DataFrame, id::Symbol, time::Symbol, variabl
         push!(lag_variables, Symbol(string(lag_var) .* "_lag"))
     end
 
-    # Drop missings in lagged time variable we just generated
+    # Drop missings in lagged variables we just generated
     dropmissing!(df_lag, lag_variables)
-
+    
     # Check if lag is actually only the expected lag apart
     for var in lag_variables[2:end]
         df_lag[!, var] = ifelse.(df_lag[!,time] .- lags .== df_lag[!,Symbol(string(time)*"_lag")], df_lag[!,var], missing)
@@ -320,8 +360,6 @@ function lagging_that_panel!(;data::DataFrame, id::Symbol, time::Symbol, variabl
         rename!(data, Symbol(string(var)*"_lag") => Symbol(lag_prefix*string(var)))
     end
 
-    print(names(data))
-
     # Return result
-    return nothing
+    return data
 end

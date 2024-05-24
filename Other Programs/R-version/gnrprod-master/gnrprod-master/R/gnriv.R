@@ -120,14 +120,16 @@ gnriv <- function(object, control, ...) {
   big_Y_lag <- fixed_lag[, ncol(fixed_lag)]
   fixed_lag <- fixed_lag[, -c(ncol(fixed_lag))]
   
-  print(coefficients)
-
+  
   # GMM starts here
   constant_gmm <- stats::optim(par = coefficients, fn = constant_moments,
                                data = fixed_base, big_Y_base = big_Y_base,
                                big_Y_lag = big_Y_lag, lag_data = fixed_lag,
                                degree = degree_w, method = method,
                                control = optim.control, ...)
+
+
+  moments_test <- constant_moments_test( C_kl = coefficients, data = fixed_base, big_Y_base = big_Y_base, big_Y_lag = big_Y_lag, lag_data = fixed_lag, degree = 1)
 
   # Not sure why he does this. Probably to fill up the return vector if optim.control did not specify anything that deviates from default.
   opt_ctrl <- list(trace = 0, fnscale = 1,
@@ -186,12 +188,59 @@ gnriv <- function(object, control, ...) {
   ss_return <- list("fixed_elas" = elasticities,
                     "productivity" = productivity,
                     "optim_info" = constant_gmm,
+                    "moments" = moments_test,
+                    "starting_values" = coefficients,
                     "control" = list("degree_w" = degree_w,
                                      "degree_tau" = degree_tau,
                                      "method" = method,
                                      "optim_control" = opt_ctrl))
   class(ss_return) <- "gnriv"
   return(ss_return)
+}
+
+constant_moments_test <- function(C_kl, data, big_Y_base, big_Y_lag, lag_data,
+                             degree) {
+  w <- big_Y_base - (data %*% C_kl)
+  w_1 <- big_Y_lag - (lag_data %*% C_kl)
+  
+  if (degree < 2) {
+    markov <- w_1
+  } else {
+    poly <- sapply(2:degree, FUN = function(i) {
+      `^`(w_1, i)
+    })
+    
+    markov <- cbind(w_1, poly)
+  }
+
+  print(ncol(markov))
+  print(nrow(markov))
+
+  reg <- stats::lm(w ~ markov)
+  csi <- w - reg$fitted.values
+
+  moments <- apply(data, MARGIN = 2, FUN = function(i) {
+    sum(i * csi) / length(i)
+  })
+  
+  obj <- t(moments) %*% moments
+
+  print(markov[1:5])
+  # print(length(big_Y_lag))
+  # print("taylor_fixed[1]")
+  # print(data[1,])  
+  # print("lag_data[1]")
+  # print(lag_data[1,])
+  # print("Coefficient")
+  # print(C_kl)
+  # print("w[1]")
+  # print(w[1])
+  # print("w_1[1]")
+  # print(w_1[1])
+  print(moments)
+  print(obj)
+  print("END")
+  return(obj)
 }
 
 constant_moments <- function(C_kl, data, big_Y_base, big_Y_lag, lag_data,
@@ -215,9 +264,10 @@ constant_moments <- function(C_kl, data, big_Y_base, big_Y_lag, lag_data,
   moments <- apply(data, MARGIN = 2, FUN = function(i) {
     sum(i * csi) / length(i)
   })
+
   
   obj <- t(moments) %*% moments
-  
+
   return(obj)
 }
 

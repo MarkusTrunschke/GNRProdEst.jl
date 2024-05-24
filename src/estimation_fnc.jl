@@ -104,7 +104,7 @@ function fes_est(; data::DataFrame, ln_share_flex_y_var::Symbol, input_var_symbo
 end
 
 ## Function to calculate quantities in the first stage (after estimation)
-function fes_predictions!(;data::DataFrame, ln_share_flex_y_var::Symbol, flex_input::Symbol, input_var_symbols::Array{Symbol}, γ_dash::Vector{Float64}, output)
+function fes_predictions!(;data::DataFrame, ln_share_flex_y_var::Symbol, flex_input::Symbol, input_var_symbols::Array{Symbol}, γ_dash::Vector{<:Number}, output)
     
     # Define matrices for OLS
     X = hcat(data.constant, Matrix(data[:,input_var_symbols]))
@@ -139,7 +139,7 @@ function fes_predictions!(;data::DataFrame, ln_share_flex_y_var::Symbol, flex_in
 end
 
 # Second stage estimation function
-function GNRSecondStage(;est_df::DataFrame, fixed_inputs::Union{Array{Symbol},Symbol}, id::Symbol, time::Symbol, called_from_GNRProd::Bool = false, starting_values::Vector = [missing], fes_returns::Dict = Dict(), opts::Dict= Dict())
+function GNRSecondStage(;est_df::DataFrame, fixed_inputs::Union{Array{Symbol},Symbol}, id::Symbol, time::Symbol, weird_Y_var::Symbol = :weird_Y, called_from_GNRProd::Bool = false, starting_values::Vector = [missing], fes_returns::Dict = Dict(), opts::Dict= Dict())
 
     # Clean inputs to be of the correct types
     fixed_inputs = GNR_input_cleaner!(fixed_inputs = fixed_inputs, stage = 2)
@@ -167,40 +167,95 @@ function GNRSecondStage(;est_df::DataFrame, fixed_inputs::Union{Array{Symbol},Sy
     
     ses_starting_values = startvalues(data = est_df, Y_var = :weird_Y, X_vars = taylor_fixed, user_start_vals = starting_values, stage = "secod stage", print_res =  opts["ses_print_starting_values"])
 
+    # Calculate some lags
+    est_df = panel_lag(data = est_df, id = id, time = time, variable = [weird_Y_var, taylor_fixed...], lag_prefix = "lag_", lags = 1, drop_missings = true, force = true)
+
     # Run estimation
-    ses_results = ses_est(;data = est_df, starting_values = ses_starting_values, id = id, time = time, taylor_fixed = taylor_fixed)
+    ses_results = ses_est(;data = est_df, starting_values = ses_starting_values, taylor_fixed = taylor_fixed, weird_Y_var = weird_Y_var)
 
     return ses_results
 end
 
-# # Second stage estimation function
-function ses_est(;data::DataFrame, id::Symbol, time::Symbol, weird_Y_var::Symbol = :weird_Y, taylor_fixed::Vector{Symbol}, starting_values::Vector)
-    
-    # Calculate some lags
-    panel_lag!(data = data, id = id, time = time, variable = [weird_Y_var, taylor_fixed...], lag_prefix = "lag_", lags = 1, drop_missings = false, force = true)
+# Second stage estimation function
+function ses_est(;data::DataFrame, taylor_fixed::Vector{Symbol}, starting_values::Vector, weird_Y_var::Symbol)
+
+    degree = 3
 
     # Run GMM estimation
-    gmm_res = ses_gmm(data, "lag_" .* string.(taylor_fixed))
-
+    # preallocate some vectors
+    taylor_fixed_mat = Array(data[!, taylor_fixed])
+    taylor_fixed_lag_mat = Array(data[!, "lag_" .* string.(taylor_fixed)])
+    constant = vec(ones(size(taylor_fixed_lag_mat)[1],1))
+    w_lag_mat = Array{Float64}(undef, length(constant), 3)
+    weird_Y_vec = data[!, weird_Y_var]
+    lag_weird_Y_vec = data[!, Symbol("lag_",weird_Y_var)]
+    w = vec(Array{Float64}(undef, length(constant), 1))
+    X = hcat(constant,w_lag_mat)
+    residuals = vec(Array{Float64}(undef, length(constant), 1))
+    coefs = Array{Float64}(undef, 1 + degree, 1)
+    m_mat = Array{Float64}(undef, size(taylor_fixed_mat))
+    m = Array{Float64}(undef, 1, size(taylor_fixed_mat)[2])
+    cache = Array{Float64}(undef, size(X)[1],1)
+    
+    @time gmm_res = ses_gmm(α = [0.388984323, -0.005024491],
+                            weird_Y_vec = weird_Y_vec,
+                            lag_weird_Y_vec = lag_weird_Y_vec,
+                            w = w,
+                            w_lag_mat = w_lag_mat, 
+                            taylor_fixed_mat = taylor_fixed_mat, 
+                            taylor_fixed_lag_mat = taylor_fixed_lag_mat, 
+                            constant = constant,
+                            X = X,
+                            coefs = coefs,
+                            residuals = residuals,
+                            m_mat = m_mat,
+                            m = m,
+                            cache = cache,
+                            degree = degree)
+    # return results
     return gmm_res
 end
 
 # 2nd stage GMM function
-function ses_gmm(data::DataFrame, α::Union{Vector, Symbol}, lag_taylor_fixed, )
-    w = data.weird_Y .- data[!, taylor_fixed] * α  # - ak*k - ak2*k2
-    w_1  = data.lag_weird_Y - data[!, lag_taylor_fixed] * α # ak*k_1-ak2*k2_1
-	w2_1 = w_1^2 # w_1*w_1 
-	w3_1 = w_1^3 # w2_1*w_1
+function ses_gmm(;α::Vector{<:Number}, 
+                 weird_Y_vec::Vector{<:Number}, 
+                 lag_weird_Y_vec::Vector{<:Number}, 
+                 w::Vector{<:Number},
+                 w_lag_mat::Array{<:Number}, 
+                 taylor_fixed_mat::Array{<:Number}, 
+                 taylor_fixed_lag_mat::Array{<:Number}, 
+                 constant::Vector{<:Number},
+                 X::Array{<:Number},
+                 coefs::Array{<:Number},
+                 residuals::Vector{<:Number},
+                 m_mat::Array{<:Number},
+                 m::Array{<:Number},
+                 cache::Array{<:Number},
+                 degree::Int)
+
+    
+    w .= weird_Y_vec .- taylor_fixed_mat * α
+    w_lag_mat[:,1]  .= lag_weird_Y_vec .- taylor_fixed_lag_mat * α
+
+    polynomial_fnc_fast!(w_lag_mat, degree, par_cal = false)
 
     # OLS
-    X = hcat(w_1, w2_1, w3_1)
-    coefs = vec(inv(X'*X)*X'*w)
-    residuals = w - x*coefs
+    X .= hcat(constant,w_lag_mat)
+
+    coefs .= vec(inv(X'*X)*X'*w)
+    mul!(cache,X,coefs)
+    residuals .= w .- cache
 
     # Calculate moments
-    m_vec = data[!, taylor_fixed] * residuals
+    m_mat .= taylor_fixed_mat .* residuals
     # m1 = k*residuals
     # m2 = k2*residuals
 
-    return w
+    # m = []
+    # for col in size(m_mat)[2]
+    #     m[col,!] = sum(m_mat[!,col]) / length(col)
+    # end
+    m .= sum(m_mat, dims=1) ./ size(m_mat)[1]
+    
+    return m
 end
