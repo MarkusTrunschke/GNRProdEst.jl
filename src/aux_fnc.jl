@@ -250,7 +250,7 @@ function polynomial_fnc!(data::DataFrame, variable::Symbol, degree::Int; name::S
 end
 
 ## If there are already prepared columns in the dataframe and their values just need to be updated, jump in here. This is the fast version with no dynamic allocations at runtime.
-function polynomial_fnc_fast!(poly_mat::Array{<:Number}, degree::Int; par_cal::Bool = false)
+function polynomial_fnc_fast!(poly_mat::Union{Array{<:Number}, SubArray{<:Number}}, degree::Int; par_cal::Bool = false)
     # Compute polynomial columns (each column of the matrix represents the i's polynomial of the first column)
     if par_cal == false
         for i in 2:degree

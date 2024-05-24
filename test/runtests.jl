@@ -67,25 +67,20 @@ data_R.constant = ones(length(data_R.id))
 res = GNRProdEst.GNRSecondStage(est_df = data_R, id = :id, time = :time, fixed_inputs = :k, starting_values = [missing], opts = opts)
 
 
-df = DataFrame(:test_col => [1,2,3,4], :test_col_2 => [1,1,1,1])
-
-@time polist, df = GNRProdEst.polynomial_fnc!(df, :k, 3, force = true)
-@profview df = GNRProdEst.polynomial_fnc!(data_R, :k, 3, preallocated = true, poly_names = polist, force = true)
-polymat = Array(data_R[!, polist])
-GNRProdEst.polynomial_fnc_fast!(polymat, 3)
+c = (cache1 = zeros(2,1),         
+    )
 
 
-function test_foo(x)
-        for i in 1:4
-                @view(x[:,i]) .= @view(x[:,i]) .^ i
-        end
+
+function foo(α::Array{<:Number}, taylor_fixed_mat::Array{<:Number}, c::NamedTuple)
+        mul!(c.cache1, taylor_fixed_mat, α)
 end
-
-x = [1 2 3 4
-     5 6 7 8
-     9 10 11 12]
-
-x_df = DataFrame(x, :auto)
-
-@time test_foo(x_df)
-
+    
+α = [1.0 
+     2.0]
+taylor_fixed_mat = ones(2,2)
+c = (cache1 = zeros(2,1),         
+        )
+    
+@time foo(α, taylor_fixed_mat, c)
+    

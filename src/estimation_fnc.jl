@@ -182,8 +182,27 @@ function ses_est(;data::DataFrame, taylor_fixed::Vector{Symbol}, starting_values
     degree = 3
 
     # Run GMM estimation
-    # preallocate some vectors
     taylor_fixed_mat = Array(data[!, taylor_fixed])
+    taylor_fixed_lag_mat = Array(data[!, "lag_" .* string.(taylor_fixed)])
+    constant = vec(ones(size(taylor_fixed_mat)[1],1))
+    w_lag_mat = Array{Float64}(undef, length(constant), 3)
+    X = hcat(constant,w_lag_mat)
+    weird_Y_vec = vec(data[!, weird_Y_var])
+    lag_weird_Y_vec = vec(data[!, Symbol("lag_",weird_Y_var)])
+    coefs = Array{Float64}(undef, 1 + degree, 1)
+
+    c = (cache1 = Array{Float64}(undef, size(X)[1],1),
+         cache2 = Array{Float64}(undef, size(X)[1],1),
+         cache3 = Array{Float64}(undef, size(X)[2], size(X)[2]),
+         cache4 = Array{Float64}(undef, size(taylor_fixed_lag_mat)),
+         cache5 = Array{Float64}(undef, 1, size(taylor_fixed_lag_mat)[2])
+    )
+
+    α = [0.388984323, -0.005024491]
+
+    ses_gmm_test($α, $weird_Y_vec, $lag_weird_Y_vec, $taylor_fixed_mat, $taylor_fixed_lag_mat, $X, $degree, $coefs, $c)
+
+    # preallocate some vectors
     taylor_fixed_lag_mat = Array(data[!, "lag_" .* string.(taylor_fixed)])
     constant = vec(ones(size(taylor_fixed_lag_mat)[1],1))
     w_lag_mat = Array{Float64}(undef, length(constant), 3)
@@ -196,24 +215,63 @@ function ses_est(;data::DataFrame, taylor_fixed::Vector{Symbol}, starting_values
     m_mat = Array{Float64}(undef, size(taylor_fixed_mat))
     m = Array{Float64}(undef, 1, size(taylor_fixed_mat)[2])
     cache = Array{Float64}(undef, size(X)[1],1)
-    
-    @time gmm_res = ses_gmm(α = [0.388984323, -0.005024491],
-                            weird_Y_vec = weird_Y_vec,
-                            lag_weird_Y_vec = lag_weird_Y_vec,
-                            w = w,
-                            w_lag_mat = w_lag_mat, 
-                            taylor_fixed_mat = taylor_fixed_mat, 
-                            taylor_fixed_lag_mat = taylor_fixed_lag_mat, 
-                            constant = constant,
-                            X = X,
-                            coefs = coefs,
-                            residuals = residuals,
-                            m_mat = m_mat,
-                            m = m,
-                            cache = cache,
-                            degree = degree)
-    # return results
+    cache2 = Array{Float64}(undef, size(X)[2],  size(X)[2])
+    cache3 = Array{Float64}(undef, size(X)[2],  size(X)[1])
+
+    gmm_res = ses_gmm(α = $α,
+                            weird_Y_vec = $weird_Y_vec,
+                            lag_weird_Y_vec = $lag_weird_Y_vec,
+                            w = $w,
+                            w_lag_mat = $w_lag_mat, 
+                            taylor_fixed_mat = $taylor_fixed_mat, 
+                            taylor_fixed_lag_mat = $taylor_fixed_lag_mat, 
+                            constant = $constant,
+                            X = $X,
+                            coefs = $coefs,
+                            residuals = $residuals,
+                            m_mat = $m_mat,
+                            m = $m,
+                            cache = $cache,
+                            cache2 = $cache2,
+                            cache3 = $cache3,
+                            degree = $degree)
     return gmm_res
+end
+
+function ses_gmm_test(α::Array{<:Number},
+                      weird_Y_vec::Vector{<:Number},
+                      lag_weird_Y_vec::Vector{<:Number}, 
+                      taylor_fixed_mat::Array{<:Number},
+                      taylor_fixed_lag_mat::Array{<:Number},
+                      X::Array{<:Number},
+                      degree::Int,
+                      coefs::Array{<:Number},
+                      c::NamedTuple)
+
+    # Calculate w and X
+    mul!(c.cache1, taylor_fixed_mat, α)
+    c.cache1 .= weird_Y_vec .- c.cache1 # c.cache1 is now w
+    mul!(c.cache2, taylor_fixed_lag_mat, α)
+    X[:,2] .= lag_weird_Y_vec .- c.cache2 # X = hcat(constant, w_lag_mat)
+
+    polynomial_fnc_fast!(@view(X[:,2:end]), degree, par_cal = false) # Fill X with polynomials of w
+
+    # OLS
+    mul!(c.cache3, X', X) # X'X
+    mul!(coefs, X', c.cache1) # X'*Y
+    ldiv!(cholesky!(Hermitian(c.cache3)), coefs) # inv(X'*X)*X*y, see https://discourse.julialang.org/t/memory-allocation-left-division-operator/103111/3 for an explination why this is the fastest way (even though not optimal for ill-conditioned matrices)
+
+    # Calculate residuals
+    mul!(c.cache2, X, coefs) # cache2 is now w_hat
+    c.cache1 .= c.cache1 .- c.cache2 # c.cache1 is now residuals
+
+    # Calculate moments
+    c.cache4 .= taylor_fixed_mat .* c.cache1
+    sum!(c.cache5, c.cache4) # Vector of moments ( taylor_fixed_mat .* c.cache1 =: Matrix of moment vectors where each column is one moment vector)
+    c.cache5 .= c.cache5 ./ length(c.cache1)
+
+    # Return 
+    return c.cache5
 end
 
 # 2nd stage GMM function
@@ -231,30 +289,30 @@ function ses_gmm(;α::Vector{<:Number},
                  m_mat::Array{<:Number},
                  m::Array{<:Number},
                  cache::Array{<:Number},
+                 cache2::Array{<:Number},
+                 cache3::Array{<:Number},
                  degree::Int)
 
-    
-    w .= weird_Y_vec .- taylor_fixed_mat * α
-    w_lag_mat[:,1]  .= lag_weird_Y_vec .- taylor_fixed_lag_mat * α
+    mul!(cache, taylor_fixed_mat, α)
+    w .= weird_Y_vec .- cache
+    mul!(cache, taylor_fixed_lag_mat, α)
+    w_lag_mat[:,1]  .= lag_weird_Y_vec .- cache
 
     polynomial_fnc_fast!(w_lag_mat, degree, par_cal = false)
 
     # OLS
     X .= hcat(constant,w_lag_mat)
 
-    coefs .= vec(inv(X'*X)*X'*w)
+    mul!(cache2,X',X)
+    mul!(cache3,inv(cache2),X')
+    mul!(coefs, cache3, w)
+    # coefs .= vec(inv(cache2)*X'*w)
     mul!(cache,X,coefs)
     residuals .= w .- cache
 
     # Calculate moments
     m_mat .= taylor_fixed_mat .* residuals
-    # m1 = k*residuals
-    # m2 = k2*residuals
 
-    # m = []
-    # for col in size(m_mat)[2]
-    #     m[col,!] = sum(m_mat[!,col]) / length(col)
-    # end
     m .= sum(m_mat, dims=1) ./ size(m_mat)[1]
     
     return m
