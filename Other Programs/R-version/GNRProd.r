@@ -81,7 +81,20 @@ gnr_FS <- gnrflex(output = "yg",
                    data = GNR_MC_sample,
                    control = list(degree = 2, maxit = 2000))
 
-gnr_SES <- gnriv(object = gnr_FS)
+gnr_SES <- gnriv(object = gnr_FS, control = list(trace = 6, 
+                                                 REPORT = 1, 
+                                                 abstol = 1.0e-16, 
+                                                 reltol = 1.490116e-16, 
+                                                 maxit = 100000,
+                                                 ndeps = rep.int(1e-7, 2))) # , control = list(method = "Nelder-Mead", trace = 6, # Don't display progress
+
+
+gnr_SES <- gnriv(object = gnr_FS, control = list(trace = 6, 
+                                                 REPORT = 1)) # , control = list(method = "Nelder-Mead", trace = 6, # Don't display progress
+
+a =gnr_SES[[1]]
+a[1:5]
+gnr_SES$optim_info
 
 fs_elas_list = gnr_FS$elas
 fs_arg_list = gnr_FS$arg

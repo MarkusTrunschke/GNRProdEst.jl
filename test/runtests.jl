@@ -4,8 +4,9 @@ using CSV
 using DataFrames
 using Statistics
 using Profile, ProfileView
+using Optim
 
-# @testset "GNRProdEst.jl" begin
+@testset "GNRProdEst.jl" begin
 
 #         # Get data and prepare for tests
 #         # data = CSV.read("C:/Users/marku/Documents/GNRProdEst/Other Programs/R-version/cd_data_500.csv", DataFrame)
@@ -44,8 +45,7 @@ using Profile, ProfileView
 #         @test GNRProdEst.GNRFirstStage(est_df = data, output = :Y, flex_inputs = :M, fixed_inputs = :K, share = :ln_share_m_y, all_input_symbols = [:K, :M], opts = opts) ≈ [ -0.0010269005340738705, 5.573265041379824e-7, -8.676082093980585e-8, -0.0001222493225217935, 3.6339341714268326e-8]
 
 #         GNRProd(;data::DataFrame, output::Symbol, flex_inputs::Union{Symbol,Array{Symbol}}, fixed_inputs::Union{Symbol,Array{Symbol}}, opts::Dict)
-    
-# end
+end
 
 
 
@@ -54,9 +54,14 @@ opts = Dict( "fes_series_order" => 2,
              "fes_method" => "NLLS", # OLS is experimental. It gives (almost) the same results but the residual is different
              "fes_print_starting_values" => true,
              "fes_print_results" => true,
-             "ses_series_order" => 2)
+             "ses_series_order" => 2,
+             "ses_optimizer" => NelderMead(),
+             "ses_optimizer_options" =>  Optim.Options(
+             f_tol = 1e-9,
+             x_tol = 1e-2,
+             g_tol = 1e-10,))
 
-# fes_res, est_df = GNRProdEst.GNRFirstStage(est_df = data, output = :yg, flex_input = :i, fixed_inputs = :k, ln_share_flex_y_var = :si, all_input_symbols = [:k, :i], opts = opts);
+fes_res, est_df = GNRProdEst.GNRFirstStage(est_df = data_R, output = :yg, flex_input = :i, fixed_inputs = :k, ln_share_flex_y_var = :si, all_input_symbols = [:k, :i], opts = opts);
 
 
 # # Get fs results from R for comparison
@@ -64,23 +69,7 @@ data_R = CSV.read("C:/Users/marku/Documents/GNRProdEst/Other Programs/GNR/Cleane
 data_R.weird_Y = data_R.big_Y
 data_R.constant = ones(length(data_R.id))
 
-res = GNRProdEst.GNRSecondStage(est_df = data_R, id = :id, time = :time, fixed_inputs = :k, starting_values = [missing], opts = opts)
+res = GNRProdEst.GNRSecondStage(est_df = data_R, id = :id, time = :time, fixed_inputs = :k, flex_input = :i, starting_values = [missing], w_degree = 1, opts = opts)
+Optim.minimizer(res)
 
-
-c = (cache1 = zeros(2,1),         
-    )
-
-
-
-function foo(α::Array{<:Number}, taylor_fixed_mat::Array{<:Number}, c::NamedTuple)
-        mul!(c.cache1, taylor_fixed_mat, α)
-end
-    
-α = [1.0 
-     2.0]
-taylor_fixed_mat = ones(2,2)
-c = (cache1 = zeros(2,1),         
-        )
-    
-@time foo(α, taylor_fixed_mat, c)
-    
+GNRProdEst.get_input_degree(vec([:k :i]), vec([:k :i :k_k]))

@@ -69,6 +69,21 @@ function opts_filler!(opts::Dict)
     if "ses_series_order" ∉ keys(opts)
         opts["ses_series_order"] = 2
     end
+    if "ses_optimizer" ∉ keys(opts)
+        opts["ses_optimizer"] = NelderMead()
+    end
+    if "ses_optimizer_options" ∉ keys(opts)
+        opts["ses_optimizer_options"] = Optim.Options(iterations = 100000,
+                                                      f_tol = 1e-9,
+                                                      x_tol = 1e-12,
+                                                      g_tol = 1e-13, # √(Σ(yᵢ-ȳ)²)/n ≤ 1.0e-13 (only sets g_abstol, not outer_g_abstol)
+                                                      allow_f_increases = true,
+                                                      show_trace = false,
+                                                      extended_trace = false,
+                                                      show_every = 1,
+                                                      time_limit = NaN,
+                                                      store_trace = false)
+    end
     return opts
 end
 
@@ -105,19 +120,33 @@ function check_array_string_only_substrings(;s_vec::Vector{String}, strings_to_c
 end
 
 ## Function to determine the intermediate input variable degree of the polynomial approximation based on the internal naming scheme
-function get_flex_degree(flex_input::Symbol, all_var_symbols::Array{Symbol})
+function get_input_degree(input::Union{Symbol,Vector{Symbol}}, all_var_symbols::Union{Symbol,Vector{Symbol}})
     
-    # Initalize array
-    flex_degree_list = Array{Union{Symbol,Int}}[]
-
-    for sym in all_var_symbols # Iterate over all symbols of the Taylor polynomials
-        parts = split(string(sym), "_")
-        count_flex = count(isequal(string(flex_input)), parts) # Check for each part if it matches the flexible input symbol and count the occurances
-        push!(flex_degree_list, [sym, count_flex + 1])
+    # Clean inputs
+    if typeof(input) == Symbol
+        input = [input]
     end
 
-    # Return list of symbols with count of flexible input occurances
-    return hcat(flex_degree_list...)
+    # Initalize array
+    input_degree_mat = Array{Union{Symbol,<:Number}}(undef, length(input) + 1, length(all_var_symbols))# Array{Union{Symbol,Int}}[]
+    
+    # Give first row all variable symbols
+    input_degree_mat[1,:] = all_var_symbols
+
+    i = 2
+    for inp in input # Loop over all inputs
+        j = 1
+        for sym in all_var_symbols # Iterate over all symbols of the Taylor polynomials
+            parts = split(string(sym), "_")
+            count_input = count(isequal(string(inp)), parts) # Check for each part if it matches the flexible input symbol and count the occurances
+            input_degree_mat[i,j] = count_input
+
+            j += 1 # Increase counter
+        end
+        i += 1 #  Increase counter
+    end
+    # Return matrix of symbols with count of input occurances
+    return input_degree_mat
 end
 
 ## Start values calculation function for the first stage (Currently only an OLS as in GNR 2020))

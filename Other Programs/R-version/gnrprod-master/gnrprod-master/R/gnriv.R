@@ -99,7 +99,6 @@ gnriv <- function(object, control, ...) {
   # Get starting values
   constant_reg <- stats::lm(big_Y ~ as.matrix(pred)) # Regress weird_Y on fixed input polynomials. Not sure if he adds a constant. GNR do and I follow them for now.
   
-  print(summary(constant_reg))
 
   coefficients <- stats::coef(constant_reg)[2:(ncol(pred) + 1)]
   names(coefficients) <- colnames(pred)
@@ -119,24 +118,23 @@ gnriv <- function(object, control, ...) {
   fixed_base <- fixed_base[, -c(ncol(fixed_base))]
   big_Y_lag <- fixed_lag[, ncol(fixed_lag)]
   fixed_lag <- fixed_lag[, -c(ncol(fixed_lag))]
-  
-  
+
   # GMM starts here
   constant_gmm <- stats::optim(par = coefficients, fn = constant_moments,
                                data = fixed_base, big_Y_base = big_Y_base,
                                big_Y_lag = big_Y_lag, lag_data = fixed_lag,
                                degree = degree_w, method = method,
                                control = optim.control, ...)
-
-
-  moments_test <- constant_moments_test( C_kl = coefficients, data = fixed_base, big_Y_base = big_Y_base, big_Y_lag = big_Y_lag, lag_data = fixed_lag, degree = 1)
-
+  print("GMM res")
+  print(constant_gmm$par)
   # Not sure why he does this. Probably to fill up the return vector if optim.control did not specify anything that deviates from default.
-  opt_ctrl <- list(trace = 0, fnscale = 1,
-                   parscale = rep.int(1, length(coefficients)),
-                   ndeps = rep.int(1e-3, length(coefficients)),
+  opt_ctrl <- list(trace = 0, # Don't display progress
+                   fnscale = 1, # An overall scaling to be applied to the value of fn and gr during optimization. If negative, turns the problem into a maximization problem. Optimization is performed on fn(par)/fnscale.
+                   parscale = rep.int(1, length(coefficients)), # A vector of scaling values for the parameters. Optimization is performed on par/parscale and these should be comparable in the sense that a unit change in any element produces about a unit change in the scaled value. Not used (nor needed) for method = "Brent".
+                   ndeps = rep.int(1e-3, length(coefficients)), # A vector of step sizes for the finite-difference approximation to the gradient, on par/parscale scale. Defaults to 1e-3.
                    maxit = 100L, abstol = -Inf,
-                   reltol = sqrt(.Machine$double.eps), alpha = 1.0, beta = 0.5,
+                   reltol = sqrt(.Machine$double.eps), # Relative convergence tollerance
+                   alpha = 1.0, beta = 0.5,
                    gamma = 2.0, REPORT = 10, type = 1, lmm = 5, factr = 1e7,
                    pgtol = 0, tmax = 10, temp = 10.0)
   
@@ -145,19 +143,36 @@ gnriv <- function(object, control, ...) {
   C_coef <- constant_gmm$par
   constants <- lapply(1:(nrow(input_degree) - 1), FUN = function(i) {
     new_in_deg <- input_degree
+    print(input_degree)
+    # Take one off from every degree if > 0 and leave at 0 otherwise
     new_in_deg[i, ] <- ifelse(new_in_deg[i, ] > 0,
                               new_in_deg[i, ] - 1,
                               new_in_deg[i, ])
-    
+    print(new_in_deg)
+    # Only take these where fixed input == 0 (last row) (Not sure which one is row 1 and row 2)
     new_C_deg <- new_in_deg[, new_in_deg[nrow(input_degree), ] == 0]
+    print("new_C_dig")
+    print(new_C_deg)
+    print(typeof(new_C_deg))
+
+
     C_match <- apply(new_C_deg, MARGIN = 2, FUN = match_gnr, degree_vec =
                        input_degree)
+    print("C_match")
+    print(typeof(C_match))
+    print(C_match)
+    print(dim(C_match))
     
     deriv_C <- all_input[, C_match]
     deriv_C[is.na(deriv_C)] <- 1
+    print("C_coef")
+    print(C_coef)
+    print("t(t(input_degree[i, input_degree[nrow(input_degree), ] == 0]) * C_coef)")
+    print(t(t(input_degree[i, input_degree[nrow(input_degree), ] == 0]) * C_coef))
     C <- deriv_C %*%
       t(t(input_degree[i, input_degree[nrow(input_degree), ] == 0]) * C_coef)
   })
+
   
   elas_noC <- lapply(1:(nrow(orig_input_degree) - 1), FUN = function(i) {
     new_in_deg <- orig_input_degree
@@ -188,14 +203,13 @@ gnriv <- function(object, control, ...) {
   ss_return <- list("fixed_elas" = elasticities,
                     "productivity" = productivity,
                     "optim_info" = constant_gmm,
-                    "moments" = moments_test,
                     "starting_values" = coefficients,
                     "control" = list("degree_w" = degree_w,
                                      "degree_tau" = degree_tau,
                                      "method" = method,
                                      "optim_control" = opt_ctrl))
   class(ss_return) <- "gnriv"
-  return(ss_return)
+  return(constants)
 }
 
 constant_moments_test <- function(C_kl, data, big_Y_base, big_Y_lag, lag_data,
@@ -213,9 +227,6 @@ constant_moments_test <- function(C_kl, data, big_Y_base, big_Y_lag, lag_data,
     markov <- cbind(w_1, poly)
   }
 
-  print(ncol(markov))
-  print(nrow(markov))
-
   reg <- stats::lm(w ~ markov)
   csi <- w - reg$fitted.values
 
@@ -225,22 +236,22 @@ constant_moments_test <- function(C_kl, data, big_Y_base, big_Y_lag, lag_data,
   
   obj <- t(moments) %*% moments
 
-  print(markov[1:5])
+  # print(markov[1:5])
   # print(length(big_Y_lag))
   # print("taylor_fixed[1]")
   # print(data[1,])  
   # print("lag_data[1]")
   # print(lag_data[1,])
-  # print("Coefficient")
+  # print("C_kl")
   # print(C_kl)
   # print("w[1]")
   # print(w[1])
   # print("w_1[1]")
   # print(w_1[1])
-  print(moments)
-  print(obj)
-  print("END")
-  return(obj)
+  # print(moments)
+  # print(obj)
+  # print("END")
+  # return(obj)
 }
 
 constant_moments <- function(C_kl, data, big_Y_base, big_Y_lag, lag_data,
