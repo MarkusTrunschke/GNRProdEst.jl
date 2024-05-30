@@ -33,6 +33,7 @@ end
 ## First stage function
 function GNRFirstStage(;est_df, output::Symbol, flex_input::Union{Symbol,Array{Symbol}}, fixed_inputs::Union{Symbol,Array{Symbol}}, ln_share_flex_y_var::Symbol, all_input_symbols::Array{Symbol}, starting_values::Vector = [missing], opts::Dict=Dict())
     
+    display(fixed_inputs)
     # Get Taylor polynomials
     taylor_input_symbols = taylor_series!(data = est_df, var_names = all_input_symbols, order = opts["fes_series_order"])
 
@@ -48,6 +49,7 @@ function GNRFirstStage(;est_df, output::Symbol, flex_input::Union{Symbol,Array{S
                            "γ_flex" => γ_flex,
                            "E" => E,
                            "taylor_series" => taylor_input_symbols,
+                           "all_inputs" => all_input_symbols,
                            "fes_estimates" => fes_res_df
                            )
 
@@ -140,7 +142,7 @@ function fes_predictions!(;data::DataFrame, ln_share_flex_y_var::Symbol, flex_in
 end
 
 # Second stage estimation function
-function GNRSecondStage(;est_df::DataFrame, flex_input::Symbol, fixed_inputs::Union{Array{Symbol},Symbol}, id::Symbol, time::Symbol, weird_Y_var::Symbol = :weird_Y, w_degree::Int = 3, called_from_GNRProd::Bool = false, starting_values::Vector = [missing], fes_returns::Dict = Dict(), opts::Dict= Dict())
+function GNRSecondStage(;est_df::DataFrame, flex_input::Symbol, fixed_inputs::Union{Array{Symbol},Symbol}, id::Symbol, time::Symbol, fes_returns::Dict, weird_Y_var::Symbol = :weird_Y, w_degree::Int = 3, called_from_GNRProd::Bool = false, starting_values::Vector = [missing], opts::Dict= Dict())
 
     # Clean inputs to be of the correct types
     fixed_inputs = GNR_input_cleaner!(fixed_inputs = fixed_inputs, stage = 2)
@@ -149,7 +151,7 @@ function GNRSecondStage(;est_df::DataFrame, flex_input::Symbol, fixed_inputs::Un
     if called_from_GNRProd == false
         opts = opts_filler!(opts)
     end
-
+    
     # Get starting values for GMM (Follow replication code of GNR for now)
     taylor_fixed = Array{Symbol}[]
     if called_from_GNRProd == true # If called from within GNRProd, taylor polynomials already exist. Use pure fixed input polynomials (as in GNR replication code)
@@ -175,8 +177,8 @@ function GNRSecondStage(;est_df::DataFrame, flex_input::Symbol, fixed_inputs::Un
     ses_gmm_res = ses_est(;data = est_df, starting_values = ses_starting_values, taylor_fixed = taylor_fixed, weird_Y_var = weird_Y_var, w_degree = w_degree, opts = opts)
 
     # Calculate some quantities
-    α = [0.76657932, -0.05454093]
-    ses_quant_res = ses_predictions!(data = est_df, weird_Y_var = weird_Y_var, flex_input = flex_input, fixed_inputs = fixed_inputs, taylor_fixed = taylor_fixed, α = α)
+    # α = [0.76657932, -0.05454093]
+    ses_quant_res = ses_predictions!(data = est_df, weird_Y_var = weird_Y_var, flex_input = flex_input, fixed_inputs = fixed_inputs, taylor_fixed = taylor_fixed, fes_returns = fes_returns, α = Optim.minimizer(ses_gmm_res))
 
     return ses_quant_res
 end
@@ -256,8 +258,8 @@ function ses_gmm!(;α::Array{<:Number},
 end
 
 # Function to calculate some quantities with results from second stage GMM estimation
-function ses_predictions!(;data::DataFrame, weird_Y_var::Symbol, flex_input::Symbol, fixed_inputs::Union{Symbol,Vector{Symbol}}, taylor_fixed::Vector{Symbol}, α::Vector{<:Number})
-    
+function ses_predictions!(;data::DataFrame, weird_Y_var::Symbol, flex_input::Symbol, fixed_inputs::Union{Symbol,Vector{Symbol}}, taylor_fixed::Vector{Symbol}, α::Vector{<:Number}, fes_returns::Dict )
+
     # log(TFP) and TFP
     data.ω = data[!, weird_Y_var] .- Array(data[!, taylor_fixed])*α
     data.Ω = exp.(data.ω)
@@ -265,26 +267,56 @@ function ses_predictions!(;data::DataFrame, weird_Y_var::Symbol, flex_input::Sym
 
     ## Fixed input elasticity
     # First part: ∂C(fixed_inputs)/∂fixed_inputs
+    # 1. Match all polynomial series variables to one lower polynomial
+    all_inputs = fes_returns["all_inputs"]
+    series_degree = get_input_degree(all_inputs, fes_returns["taylor_series"]) # Degree of input in polynomial series
 
-    CONTINUE HERE: CHECK WHICH INPUT DEGREE REALLY NEEDED (first stage? includes flexible and fixed inputs in this part of R code?)
-    all_inputs = hcat(fixed_inputs, flex_input)
-    taylor_input_symbols = taylor_series!(data = est_df, var_names = all_inputs, order = opts["fes_series_order"])
-    # print(taylor_input_symbols)
-    # print(get_input_degree(fixed_input, vcat(taylor_input_symbols)))
+    # Preallocate output matrix
+    constants = Array{Float64}(undef, length(data.ω), size(series_degree)[1] - 2)
 
+    j = 1 # Iterator over output matrix
+    for der_var_row = 2:size(series_degree)[1] - 1 # eachrow(series_degree[begin + 1:end-1,:])
 
-    # Integration constant
-    # C_coef <- constant_gmm$par # GMM results
-    # constants <- lapply(1:(nrow(input_degree) - 1), FUN = function(i) {
-    #   new_in_deg <- input_degree
-    #   new_in_deg[i, ] <- ifelse(new_in_deg[i, ] > 0,
-    #                             new_in_deg[i, ] - 1,
-    #                             new_in_deg[i, ])
-      
-    #   new_C_deg <- new_in_deg[, new_in_deg[nrow(input_degree), ] == 0]
-    #   C_match <- apply(new_C_deg, MARGIN = 2, FUN = match_gnr, degree_vec =
-    #                      input_degree)
-      
+        dev_fix_series_degree = copy(series_degree) # Get one degree lower version of series
+        dev_fix_series_degree[der_var_row,:] .= ifelse.(series_degree[der_var_row,:] .> 0, series_degree[der_var_row,:] .- 1, series_degree[der_var_row,:] ) # end-1 b/c only one flex input. If allows more inputs, change to end - number of flex inputs
+        C_deg = dev_fix_series_degree[:,dev_fix_series_degree[end,:] .== 0] # Drop columns with zero in flex input row
+
+        # Check now which columns of original poly series fits the derivative of the current row (variable)
+        match_arr = Array{Union{Symbol, Int}}(undef, 2, size(C_deg)[2]) # This will be an array of original poly series symbols and the column index that fits in the derivative of the series
+        match_arr[1,:] .= C_deg[1,:]
+        i = 1
+        for col in eachcol(C_deg[begin + 1:end,:]) # Leave first row out because it contains symbols of polynomials
+            check_mat = series_degree[begin + 1:end,:] .== col # Check if elements of the current column fit elements of each column of the polynomial series
+            check_vec = prod.(eachcol(check_mat)) # Resulting vector has 1 if all elements of a column fit the current checked column. Product of all elements of each column
+            indices = findall(check_vec)# Get the indices (should only be one at a time) of the fitting column
+            if size(indices) != (0,) # If one is found write it into output matrix
+                match_arr[2,i] = indices[]
+            else # If none is found return a zero
+                match_arr[2,i] = 0
+            end
+            i += 1 # Increase column counter
+        end
+        
+        # Select columns from data that correspond to the correct polynomials. If match_arr == 0, there needs to be a constant.
+        deriv_C = Array{Float64}(undef, size(data[!, weird_Y_var])[1], size(match_arr)[2])
+        for col in 1:size(match_arr,2)
+            if match_arr[2,col] == 0
+                deriv_C[:,col] .= 1
+            else
+                deriv_C[:,col] .= data[!,fes_returns["taylor_series"][match_arr[2,col]]]
+            end
+        end
+        
+        # Calculate value of part of the derivative of the polynomial series corresponding to the current variable (row in series_degree)
+        constants[:, j] .= deriv_C * (series_degree[der_var_row,series_degree[end,:] .== 0] .* α)
+        j =+ 1
+    end
+    
+
+    # Check which original column fits derived column
+    # for input = 1:all_inputs
+    # C = deriv_C .* (series_degree[2:end,series_degree[end,:] .== 0]' .* α)'
+    # end
     #   deriv_C <- all_input[, C_match]
     #   deriv_C[is.na(deriv_C)] <- 1
     #   C <- deriv_C %*%
@@ -313,5 +345,5 @@ function ses_predictions!(;data::DataFrame, weird_Y_var::Symbol, flex_input::Sym
     #     elas_noC[[x]] + constants[[x]]
     #   })
 
-    return data
+    # return data
 end

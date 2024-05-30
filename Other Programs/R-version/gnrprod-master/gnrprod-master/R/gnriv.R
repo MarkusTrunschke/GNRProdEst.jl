@@ -125,8 +125,7 @@ gnriv <- function(object, control, ...) {
                                big_Y_lag = big_Y_lag, lag_data = fixed_lag,
                                degree = degree_w, method = method,
                                control = optim.control, ...)
-  print("GMM res")
-  print(constant_gmm$par)
+  
   # Not sure why he does this. Probably to fill up the return vector if optim.control did not specify anything that deviates from default.
   opt_ctrl <- list(trace = 0, # Don't display progress
                    fnscale = 1, # An overall scaling to be applied to the value of fn and gr during optimization. If negative, turns the problem into a maximization problem. Optimization is performed on fn(par)/fnscale.
@@ -141,23 +140,29 @@ gnriv <- function(object, control, ...) {
   opt_ctrl[names(optim.control)] <- optim.control
 
   C_coef <- constant_gmm$par
-  constants <- lapply(1:(nrow(input_degree) - 1), FUN = function(i) {
-    new_in_deg <- input_degree
-    print(input_degree)
+
+  constants <- lapply(1:(nrow(input_degree) - 1), FUN = function(i) { # input_degree has as many rows as inputs
+    new_in_deg <- input_degree # Input degree has first rows for fixed than flex inputs. Here: first row fixed and second flex
+
+    print(paste("Working on line: ", as.character(i)))
     # Take one off from every degree if > 0 and leave at 0 otherwise
     new_in_deg[i, ] <- ifelse(new_in_deg[i, ] > 0,
                               new_in_deg[i, ] - 1,
                               new_in_deg[i, ])
-    print(new_in_deg)
-    # Only take these where fixed input == 0 (last row) (Not sure which one is row 1 and row 2)
+    
+    # Only take these where flex input == 0 (last row)
     new_C_deg <- new_in_deg[, new_in_deg[nrow(input_degree), ] == 0]
-    print("new_C_dig")
+
+    print("input_degree")
+    print(input_degree)
+    print("new_in_deg")
+    print(new_in_deg)
+    print("new_C_deg")
     print(new_C_deg)
-    print(typeof(new_C_deg))
-
-
+    print("input_degree")
+    print(input_degree)
     C_match <- apply(new_C_deg, MARGIN = 2, FUN = match_gnr, degree_vec =
-                       input_degree)
+                       input_degree) # This thing goes through all columns of the derivative of input_degrees and compares it to input_degrees columns.
     print("C_match")
     print(typeof(C_match))
     print(C_match)
@@ -167,12 +172,15 @@ gnriv <- function(object, control, ...) {
     deriv_C[is.na(deriv_C)] <- 1
     print("C_coef")
     print(C_coef)
+    print("input_degree")
+    print(input_degree)
+    print("t(t(input_degree[i, input_degree[nrow(input_degree), ] == 0])")
+    print(t(t(input_degree[i, input_degree[nrow(input_degree), ] == 0])))
     print("t(t(input_degree[i, input_degree[nrow(input_degree), ] == 0]) * C_coef)")
     print(t(t(input_degree[i, input_degree[nrow(input_degree), ] == 0]) * C_coef))
     C <- deriv_C %*%
       t(t(input_degree[i, input_degree[nrow(input_degree), ] == 0]) * C_coef)
   })
-
   
   elas_noC <- lapply(1:(nrow(orig_input_degree) - 1), FUN = function(i) {
     new_in_deg <- orig_input_degree
@@ -283,7 +291,7 @@ constant_moments <- function(C_kl, data, big_Y_base, big_Y_lag, lag_data,
 }
 
 match_gnr <- function(i, degree_vec) {
-  match_test <- apply(i == degree_vec, MARGIN = 2, FUN = prod)
+  match_test <- apply(i == degree_vec, MARGIN = 2, FUN = prod) # For whatever fucking reason, you can use the prod fnc in R to compare vectors.
   col_index <- ifelse(length(which(match_test == 1)) != 0,
                       which(match_test == 1), NA)
 }

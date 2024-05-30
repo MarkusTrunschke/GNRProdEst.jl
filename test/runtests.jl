@@ -61,15 +61,18 @@ opts = Dict( "fes_series_order" => 2,
              x_tol = 1e-2,
              g_tol = 1e-10,))
 
-fes_res, est_df = GNRProdEst.GNRFirstStage(est_df = data_R, output = :yg, flex_input = :i, fixed_inputs = :k, ln_share_flex_y_var = :si, all_input_symbols = [:k, :i], opts = opts);
 
-
+display(fes_res)
 # # Get fs results from R for comparison
 data_R = CSV.read("C:/Users/marku/Documents/GNRProdEst/Other Programs/GNR/Cleaned version of Table_1/cd_data_500_w_fs.csv", DataFrame)
 data_R.weird_Y = data_R.big_Y
 data_R.constant = ones(length(data_R.id))
+data_R.k2 = data_R.k .* rand(Float64, length(data_R.k))
 
-res = GNRProdEst.GNRSecondStage(est_df = data_R, id = :id, time = :time, fixed_inputs = :k, flex_input = :i, starting_values = [missing], w_degree = 1, opts = opts)
+fes_res = GNRProdEst.GNRFirstStage(est_df = data_R, output = :yg, flex_input = :i, fixed_inputs = [:k :k2], ln_share_flex_y_var = :si, all_input_symbols = [:k, :k2, :i], opts = opts);
+
+
+res = GNRProdEst.GNRSecondStage(est_df = data_R, id = :id, time = :time, fixed_inputs = [:k :k2], flex_input = :i, starting_values = [missing], w_degree = 1, fes_returns = fes_res, opts = opts);
 Optim.minimizer(res)
 
 GNRProdEst.get_input_degree(vec([:k :i]), vec([:k :i :k_k]))

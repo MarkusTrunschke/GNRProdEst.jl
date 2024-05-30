@@ -68,12 +68,12 @@ summary(gnr_est) # Converges and gives decent results
 
 GNR_MC_sample$big_Y = gnr_FS$arg$big_Y
 GNR_MC_sample$errors <- gnr_FS$elas$residuals
-
+GNR_MC_sample$k2 <- GNR_MC_sample$k * runif(length(GNR_MC_sample$k))
 
 write.csv(GNR_MC_sample, "C:/Users/marku/Documents/GNRProdEst/Other Programs/GNR/Cleaned version of Table_1/cd_data_500_w_fs.csv")
 
 gnr_FS <- gnrflex(output = "yg",
-                   fixed = "k",
+                   fixed = c("k", "k2"),
                    flex = "i",
                    id = "id",
                    time = "time",
