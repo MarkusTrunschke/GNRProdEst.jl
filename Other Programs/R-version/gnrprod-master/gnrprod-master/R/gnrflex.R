@@ -114,6 +114,13 @@ gnrflex <- function(output, fixed, flex, share, id, time, data, control) {
   gamma <- as.matrix(coef / mean_exp_err)
   flex_gamma <- gamma / gamma_denom
 
+  print("gamma")
+  print(gamma)
+  print("flex_gamma")
+  print(flex_gamma)
+  print("gamma[-1, ] / gamma_denom[-1, ]")
+  print(gamma[-1, ] / gamma_denom[-1, ])
+
   integ_G_I <- pred_fs(flex_gamma, poly_input)
   integ_G_I <- integ_G_I * flex
   big_Y <- as.matrix(output - errors - integ_G_I)

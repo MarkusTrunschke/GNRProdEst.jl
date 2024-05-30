@@ -73,6 +73,5 @@ fes_res = GNRProdEst.GNRFirstStage(est_df = data_R, output = :yg, flex_input = :
 
 
 res = GNRProdEst.GNRSecondStage(est_df = data_R, id = :id, time = :time, fixed_inputs = [:k :k2], flex_input = :i, starting_values = [missing], w_degree = 1, fes_returns = fes_res, opts = opts);
-Optim.minimizer(res)
 
 GNRProdEst.get_input_degree(vec([:k :i]), vec([:k :i :k_k]))

@@ -273,6 +273,7 @@ function ses_predictions!(;data::DataFrame, weird_Y_var::Symbol, flex_input::Sym
 
     # Preallocate output matrix
     constants = Array{Float64}(undef, length(data.ω), size(series_degree)[1] - 2)
+    no_constants = Array{Float64}(undef, length(data.ω), size(series_degree)[1] - 2)
 
     j = 1 # Iterator over output matrix
     for der_var_row = 2:size(series_degree)[1] - 1 # eachrow(series_degree[begin + 1:end-1,:])
@@ -309,41 +310,55 @@ function ses_predictions!(;data::DataFrame, weird_Y_var::Symbol, flex_input::Sym
         
         # Calculate value of part of the derivative of the polynomial series corresponding to the current variable (row in series_degree)
         constants[:, j] .= deriv_C * (series_degree[der_var_row,series_degree[end,:] .== 0] .* α)
-        j =+ 1
+        
+        j += 1 # Increase loop counter
     end
-    
 
-    # Check which original column fits derived column
-    # for input = 1:all_inputs
-    # C = deriv_C .* (series_degree[2:end,series_degree[end,:] .== 0]' .* α)'
-    # end
-    #   deriv_C <- all_input[, C_match]
-    #   deriv_C[is.na(deriv_C)] <- 1
-    #   C <- deriv_C %*%
-    #     t(t(input_degree[i, input_degree[nrow(input_degree), ] == 0]) * C_coef)
-    # })
+    j = 1
+    for der_var_row = 2:size(series_degree)[1] - 1 # eachrow(series_degree[begin + 1:end-1,:])
 
+        dev_fix_series_degree = copy(series_degree) # Get one degree lower version of series
+        dev_fix_series_degree[der_var_row,:] .= ifelse.(series_degree[der_var_row,:] .> 0, series_degree[der_var_row,:] .- 1, series_degree[der_var_row,:] ) # end-1 b/c only one flex input. If allows more inputs, change to end - number of flex inputs
+        dev_fix_series_degree[end,:] .= dev_fix_series_degree[end,:] .+ 1
+        
+        noC_deg = copy(dev_fix_series_degree)
 
+        # Check now which columns of original poly series fits the derivative of the current row (variable)
+        match_arr = Array{Union{Symbol, Int}}(undef, 2, size(noC_deg)[2]) # This will be an array of original poly series symbols and the column index that fits in the derivative of the series
+        match_arr[1,:] .= noC_deg[1,:]
+        i = 1
+        for col in eachcol(noC_deg[begin + 1:end,:]) # Leave first row out because it contains symbols of polynomials
+            check_mat = series_degree[begin + 1:end,:] .== col # Check if elements of the current column fit elements of each column of the polynomial series
+            check_vec = prod.(eachcol(check_mat)) # Resulting vector has 1 if all elements of a column fit the current checked column. Product of all elements of each column
+            indices = findall(check_vec)# Get the indices (should only be one at a time) of the fitting column
+            if size(indices) != (0,) # If one is found write it into output matrix
+                match_arr[2,i] = indices[]
+            else # If none is found return a zero
+                match_arr[2,i] = 0
+            end
+            i += 1 # Increase column counter
+        end
 
+        # Select columns from data that correspond to the correct polynomials. If match_arr == 0, there needs to be a constant.
+        deriv_noC = Array{Float64}(undef, size(data[!, weird_Y_var])[1], size(match_arr)[2])
+        for col in 1:size(match_arr,2)
+            if match_arr[2,col] == 0
+                deriv_noC[:,col] .= 0
+            else
+                deriv_noC[:,col] .= data[!,fes_returns["taylor_series"][match_arr[2,col]]]
+            end
+        end
 
-    # elas_noC <- lapply(1:(nrow(orig_input_degree) - 1), FUN = function(i) {
-    #     new_in_deg <- orig_input_degree
-    #     new_in_deg[i, ] <- ifelse(new_in_deg[i, ] > 0,
-    #                               new_in_deg[i, ] - 1,
-    #                               new_in_deg[i, ])
-    
-    #     new_in_deg[nrow(new_in_deg), ] <- new_in_deg[nrow(new_in_deg), ] + 1
-    
-    #     in_match <- apply(new_in_deg, MARGIN = 2, FUN = match_gnr, degree_vec =
-    #                         orig_input_degree)
-    
-    #     deriv_input <- orig_input[, in_match]
-    #     deriv_input[is.na(deriv_input)] <- 0
-    #     elas <- deriv_input %*% t(t(orig_input_degree[i, ]) * (object$arg$D_coef))
-    #   })
-    #   elas = lapply(1:length(elas_noC), FUN = function(x) {
-    #     elas_noC[[x]] + constants[[x]]
-    #   })
+        # Calculate value of part of the derivative of the polynomial series corresponding to the current variable (row in series_degree)
+        no_constants[:, j] .= deriv_noC * (series_degree[der_var_row, :] .* fes_returns["γ_flex"][begin + 1:end])
 
-    # return data
+        
+        j += 1 # Increase loop counter
+    end
+
+    # Calculate elasticities of fixed inputs (are the sum of the constant and non-constant elasticity parts)
+    fixed_elas = no_constants .+ constants
+
+    # Return results
+    return fixed_elas
 end
