@@ -2,7 +2,7 @@ function prep_data!(data::DataFrame; output::Symbol, flex_input::Symbol, fixed_i
     
     ## Select necessary variables from data frame
     # Flatten all arguments. Some might be arrays of symbols and others might just be symbols. The following iterates over all sublists and flattens them
-    all_var_symbols = [x for sublist in [output, flex_input, fixed_inputs, id, time] for x in (sublist isa Vector ? sublist : [sublist])]
+    # all_var_symbols = [x for sublist in [output, flex_input, fixed_inputs, id, time] for x in (sublist isa Vector ? sublist : [sublist])]
 
     all_input_symbols = [x for sublist in [flex_input, fixed_inputs] for x in (sublist isa Vector ? sublist : [sublist])]
     
@@ -23,5 +23,5 @@ function prep_data!(data::DataFrame; output::Symbol, flex_input::Symbol, fixed_i
     end
 
     # Return the data
-    return est_df, all_var_symbols, all_input_symbols, ln_share_flex_y_var
+    return est_df, all_input_symbols, ln_share_flex_y_var
 end

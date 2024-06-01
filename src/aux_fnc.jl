@@ -1,15 +1,19 @@
 ## Function that converts inputs into correct types for my program
-function GNR_input_cleaner!(;fixed_inputs::Union{Array{Symbol},Symbol}, stage::Int)
+function GNR_input_cleaner!(;fixed_inputs::Union{Array{Symbol},Symbol}, flex_input::Union{Array{Symbol},Symbol}, all_inputs::Array{Symbol}, stage::Int)
     # Convert fixed input into vector of symbols if an array was given
     if typeof(fixed_inputs) == Array || typeof(fixed_inputs) == Matrix{Symbol}
         fixed_inputs = vec(fixed_inputs)
     end
 
-    # Convert vector of symbols into symbol if there is only one element
-    if typeof(fixed_inputs) == Vector && size(fixed_inputs) == (1,)
-        fixed_inputs = fixed_inputs[1]
+    # # Convert vector of symbols into symbol if there is only one element
+    # if typeof(fixed_inputs) == Vector && size(fixed_inputs) == (1,)
+    #     fixed_inputs = fixed_inputs[1]
+    # end
+
+    if isdefined(all_inputs,1) == false # Only check first element but that should be enough to see if user provided the input
+        all_inputs = [x for sublist in [flex_input, fixed_inputs] for x in (sublist isa Vector ? sublist : [sublist])]
     end
-    
+
     if stage == 0 # If it runs from the highest level command
 
     elseif stage == 1 # For inputs that are only present in the first stage
@@ -18,7 +22,7 @@ function GNR_input_cleaner!(;fixed_inputs::Union{Array{Symbol},Symbol}, stage::I
 
     end
     
-    return fixed_inputs
+    return fixed_inputs, flex_input, all_inputs
 end
 
 ## Function that checks if every input makes sense and thows an error if the user messed up
@@ -84,6 +88,13 @@ function opts_filler!(opts::Dict)
                                                       time_limit = NaN,
                                                       store_trace = false)
     end
+    if "ses_print_starting_values" ∉ keys(opts) 
+        opts["ses_print_starting_values"] => false
+    end
+    if "ses_print_results" ∉ keys(opts)
+        opts["ses_print_results"] => false
+    end
+    
     return opts
 end
 

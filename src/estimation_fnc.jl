@@ -11,7 +11,7 @@ function GNRProd(;data::DataFrame,
                   opts::Dict = Dict())
     
     # Clean inputs to be of the correct types
-    fixed_inputs = GNR_input_cleaner!(fixed_inputs = fixed_inputs, stage = 0)
+    fixed_inputs = GNR_input_cleaner!(fixed_inputs = fixed_inputs, flex_input = flex_input, all_inputs = all_inputs, stage = 0)
 
     # Throw error if user messed up
     error_throw_fnc(data,output,flex_input,fixed_inputs,ln_share_flex_y_var,id,time,fes_starting_values,ses_starting_values,opts)
@@ -20,44 +20,51 @@ function GNRProd(;data::DataFrame,
     opts = opts_filler!(opts)
 
     ## Run data preparation to ensure inputs are working with internals
-    est_df, all_var_symbols, all_input_symbols, ln_share_flex_y_var = prep_data!(data, output = output, flex_input = flex_input, fixed_inputs = fixed_inputs, ln_share_flex_y_var = ln_share_flex_y_var, id = id, time = time)
+    est_df, all_input_symbols, ln_share_flex_y_var = prep_data!(data, output = output, flex_input = flex_input, fixed_inputs = fixed_inputs, ln_share_flex_y_var = ln_share_flex_y_var, id = id, time = time)
 
     ## Run first stage estimation
-    fes_returns = GNRFirstStage(est_df = est_df, output = output, flex_input = flex_input, fixed_inputs = fixed_inputs, ln_share_flex_y_var = ln_share_flex_y_var, all_input_symbols = all_input_symbols, starting_values = fes_starting_values, opts = opts)
+    fes_returns = GNRFirstStage!(est_df = est_df, output = output, flex_input = flex_input, fixed_inputs = fixed_inputs, ln_share_flex_y_var = ln_share_flex_y_var, all_input_symbols = all_input_symbols, starting_values = fes_starting_values, opts = opts)
 
     ## Run second stage estimation
-    ses_returns = GNRSecondStage(est_df = est_df, fes_returns = fes_returns, fixed_inputs = fixed_inputs, starting_values = ses_starting_values, called_from_GNRProd = true, opts = opts)
+    ses_returns = GNRSecondStage!(est_df = fes_returns("estimation_sample"), id = id, time = time, fixed_inputs = fixed_inputs, flex_input = flex_input, starting_values = ses_starting_values, w_degree = 1, called_from_GNRProd = true, fes_returns = fes_returns, opts = opts)
 
-    return fes_returns, ses_returns, est_df
+    return fes_returns, ses_returns
 end
 ## First stage function
-function GNRFirstStage(;est_df, output::Symbol, flex_input::Union{Symbol,Array{Symbol}}, fixed_inputs::Union{Symbol,Array{Symbol}}, ln_share_flex_y_var::Symbol, all_input_symbols::Array{Symbol}, starting_values::Vector = [missing], opts::Dict=Dict())
+function GNRFirstStage!(;est_df, output::Symbol, flex_input::Union{Symbol,Array{Symbol}}, fixed_inputs::Union{Symbol,Array{Symbol}}, ln_share_flex_y_var::Symbol, all_input_symbols::Array{Symbol} = Array{Symbol}(undef,1,1), starting_values::Vector = [missing], opts::Dict=Dict())
     
-    display(fixed_inputs)
+    GNR_input_cleaner!(fixed_inputs = fixed_inputs, flex_input = flex_input, all_inputs = all_input_symbols, stage = 1)
+    
     # Get Taylor polynomials
     taylor_input_symbols = taylor_series!(data = est_df, var_names = all_input_symbols, order = opts["fes_series_order"])
 
     # Run first stage estimation
-    γ_dash, fes_res_df = fes_est(data=est_df, ln_share_flex_y_var=ln_share_flex_y_var, input_var_symbols=taylor_input_symbols, method = opts["fes_method"], print_res = opts["fes_print_results"], starting_values = starting_values, opts = opts)
+    γ_dash = fes_est(data=est_df, ln_share_flex_y_var=ln_share_flex_y_var, input_var_symbols=taylor_input_symbols, method = opts["fes_method"], starting_values = starting_values, opts = opts)
     
     # Calculate some quantities
-    γ, γ_flex, E = fes_predictions!(data = est_df, ln_share_flex_y_var = ln_share_flex_y_var, flex_input = flex_input, input_var_symbols=taylor_input_symbols, γ_dash = γ_dash, output = output)
+    fes_res, E = fes_predictions!(data = est_df, ln_share_flex_y_var = ln_share_flex_y_var, flex_input = flex_input, input_var_symbols=taylor_input_symbols, γ_dash = γ_dash, output = output)
+
+    # Print results
+    if opts["fes_print_results"] == true
+        fes_print_res(fes_res)
+    end
 
     # Put return objects in dictionary
-    return_elements = Dict("γ" => γ,
+    return_elements = Dict("γ" => fes_res.γ,
                            "γ_dash" => γ_dash,
-                           "γ_flex" => γ_flex,
+                           "γ_flex" => fes_res.γ_flex,
                            "E" => E,
                            "taylor_series" => taylor_input_symbols,
                            "all_inputs" => all_input_symbols,
-                           "fes_estimates" => fes_res_df
+                           "fes_estimates" => fes_res,
+                           "estimation_data" => est_df
                            )
 
     return return_elements
 end
 
 ## First stage estimation function
-function fes_est(; data::DataFrame, ln_share_flex_y_var::Symbol, input_var_symbols::Array{Symbol}, method::String, print_res::Bool, starting_values::Vector, opts::Dict)
+function fes_est(; data::DataFrame, ln_share_flex_y_var::Symbol, input_var_symbols::Array{Symbol}, method::String, starting_values::Vector, opts::Dict)
     
     if method == "OLS" # The GNR replication code uses a non-linear regression of the shares onto the natural logarithm of the taylor polynomials for the first stage. However, this seems unnecessary. I cannot see any reason not to simply take the exponential of the shares onto the taylor polynomials. This is a linear regression estimated by OLS. It is much faster to calculate and much more robust because it is not a numerical optimization but has a simple analytical solution.
         # Define matrices for OLS
@@ -84,33 +91,20 @@ function fes_est(; data::DataFrame, ln_share_flex_y_var::Symbol, input_var_symbo
         # Solve for parameters
         fes_res = curve_fit(model, X, Y, γ_start)
 
-        fes_results = fes_res.param
-
+        fes_results = fes_res.param # Return parameters
     end
-
-    # Print results if user wants that
-    all_symbols = vcat([:constant], input_var_symbols)
-    if print_res == true
-        print_tab = hcat(all_symbols, fes_results)
-        header = (["Variable", "Value"])
-
-        println("First stage results:")
-        pretty_table(print_tab, header = header)
-    end
-
-    # Get results in DataFrame
-    fes_res_df = DataFrame(Variable = all_symbols, Coefficient = fes_results)
 
     # Return solution vector
-    return fes_results, fes_res_df
+    return fes_results
 end
 
 ## Function to calculate quantities in the first stage (after estimation)
 function fes_predictions!(;data::DataFrame, ln_share_flex_y_var::Symbol, flex_input::Symbol, input_var_symbols::Array{Symbol}, γ_dash::Vector{<:Number}, output)
     
     # Define matrices for OLS
-    X = hcat(data.constant, Matrix(data[:,input_var_symbols]))
-    
+    X_symbols = vcat(:constant, input_var_symbols)
+    X = Matrix(data[!, X_symbols]) # hcat(data.constant, Matrix(data[:,input_var_symbols]))
+
     # Calculate flexible input elasticity
     data.ln_D_E = log.(X*γ_dash) # Eq. (21)
     data.D_E = X*γ_dash
@@ -129,7 +123,7 @@ function fes_predictions!(;data::DataFrame, ln_share_flex_y_var::Symbol, flex_in
     
     # Calculate the integral (This part does the same as the R command (gnrflex) but differs from GNR's replication code. They never correct their coefficients for E.)
     # Get degree of intermediate input
-    flex_degree = get_input_degree(flex_input, vcat(:constant, input_var_symbols))
+    flex_degree = get_input_degree(flex_input, X_symbols)
     γ_flex = γ ./ ( 1 .+ flex_degree[2,:]) # Calculate first part of first/second equation on p.2995
 
     data.int_flex = X*γ_flex .* data[! ,flex_input] # Multiply by flex input to add the + 1
@@ -137,15 +131,30 @@ function fes_predictions!(;data::DataFrame, ln_share_flex_y_var::Symbol, flex_in
     # Calculate \mathcal(Y) (From eq. (16) and hint on p.2995)
     data.weird_Y = data[!, output] - data.int_flex - data.ϵ
 
+    # Put results in DataFrame
+    fes_res_df = DataFrame(Variable = X_symbols, γ = γ, γ_dash = γ_dash, γ_flex = γ_flex)
+
     # Return results
-    return γ, γ_flex, E
+    return fes_res_df, E
+end
+
+## Function to print first stage results
+function fes_print_res(fes_res::DataFrame)
+    # Print results if user wants that
+    print_tab = hcat(fes_res.Variable, fes_res.γ, fes_res.γ_dash)
+    header = (["Variable", "γ", "γ'"])
+
+    println("First stage results:")
+    pretty_table(print_tab, header = header)
+
+    return nothing
 end
 
 # Second stage estimation function
-function GNRSecondStage(;est_df::DataFrame, flex_input::Symbol, fixed_inputs::Union{Array{Symbol},Symbol}, id::Symbol, time::Symbol, fes_returns::Dict, weird_Y_var::Symbol = :weird_Y, w_degree::Int = 3, called_from_GNRProd::Bool = false, starting_values::Vector = [missing], opts::Dict= Dict())
+function GNRSecondStage!(;est_df::DataFrame, flex_input::Symbol, fixed_inputs::Union{Array{Symbol},Symbol}, all_inputs = Array{Symbol}(undef, size(hcat(fixed_inputs, flex_input))) , id::Symbol, time::Symbol, fes_returns::Dict, weird_Y_var::Symbol = :weird_Y, w_degree::Int = 3, called_from_GNRProd::Bool = false, starting_values::Vector = [missing], opts::Dict= Dict())
 
     # Clean inputs to be of the correct types
-    fixed_inputs = GNR_input_cleaner!(fixed_inputs = fixed_inputs, stage = 2)
+    fixed_inputs, flex_input, all_inputs = GNR_input_cleaner!(fixed_inputs = fixed_inputs, flex_input = flex_input, all_inputs = all_inputs, stage = 2)
 
     # Get additional options right
     if called_from_GNRProd == false
@@ -177,9 +186,12 @@ function GNRSecondStage(;est_df::DataFrame, flex_input::Symbol, fixed_inputs::Un
     ses_gmm_res = ses_est(;data = est_df, starting_values = ses_starting_values, taylor_fixed = taylor_fixed, weird_Y_var = weird_Y_var, w_degree = w_degree, opts = opts)
 
     # Calculate some quantities
-    # α = [0.76657932, -0.05454093]
     ses_quant_res = ses_predictions!(data = est_df, weird_Y_var = weird_Y_var, flex_input = flex_input, fixed_inputs = fixed_inputs, taylor_fixed = taylor_fixed, fes_returns = fes_returns, α = Optim.minimizer(ses_gmm_res))
 
+    # Print results
+    if opts["ses_print_results"] == true
+        ses_print_res(data = est_df, fixed_inputs = fixed_inputs)
+    end
     return ses_quant_res
 end
 
@@ -310,7 +322,7 @@ function ses_predictions!(;data::DataFrame, weird_Y_var::Symbol, flex_input::Sym
         
         # Calculate value of part of the derivative of the polynomial series corresponding to the current variable (row in series_degree)
         constants[:, j] .= deriv_C * (series_degree[der_var_row,series_degree[end,:] .== 0] .* α)
-        
+
         j += 1 # Increase loop counter
     end
 
@@ -359,6 +371,41 @@ function ses_predictions!(;data::DataFrame, weird_Y_var::Symbol, flex_input::Sym
     # Calculate elasticities of fixed inputs (are the sum of the constant and non-constant elasticity parts)
     fixed_elas = no_constants .+ constants
 
+    # Put results in dataframe
+    j = 1
+    for input in fixed_inputs
+        data[!, Symbol(input, "_elas")] = fixed_elas[:,j] # Add elasticity vector with correct symbol to data
+        j += 1 # Increase counter
+    end
+
     # Return results
     return fixed_elas
+end
+
+## Function printing results of the second stage
+function ses_print_res(; data::DataFrame, fixed_inputs::Array{Symbol})
+    
+    # Print parameters of the GMM estimation
+
+
+    # Print summary stats of all output elasticities of inputs
+    desc_table = Array{Union{Symbol,Float64}}(undef, length(fixed_inputs), 5)
+
+    j = 1
+    for inp in fixed_inputs
+        desc_table[j,1] = inp
+        desc_table[j,2] = mean(data[!, Symbol(inp,"_elas")])
+        desc_table[j,3] = std(data[!, Symbol(inp,"_elas")])
+        desc_table[j,4] = minimum(data[!, Symbol(inp,"_elas")])
+        desc_table[j,5] = maximum(data[!, Symbol(inp,"_elas")])
+
+        j += 1
+    end
+
+    header = (["Variable", "Mean", "SD", "Min", "Max"])
+
+    println("Fixed input elasticities:")
+    pretty_table(desc_table, header = header)
+
+    return nothing
 end
