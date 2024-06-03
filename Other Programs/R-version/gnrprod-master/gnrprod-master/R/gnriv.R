@@ -175,8 +175,6 @@ gnriv <- function(object, control, ...) {
     deriv_input[is.na(deriv_input)] <- 0
     elas <- deriv_input %*% t(t(orig_input_degree[i, ]) * (object$arg$D_coef))
   })
-  print("elas_noC")
-  print(elas_noC)
   elas = lapply(1:length(elas_noC), FUN = function(x) {
     elas_noC[[x]] + constants[[x]]
   })
@@ -197,7 +195,7 @@ gnriv <- function(object, control, ...) {
                                      "method" = method,
                                      "optim_control" = opt_ctrl))
   class(ss_return) <- "gnriv"
-  return(constants)
+  return(ss_return)
 }
 
 constant_moments_test <- function(C_kl, data, big_Y_base, big_Y_lag, lag_data,

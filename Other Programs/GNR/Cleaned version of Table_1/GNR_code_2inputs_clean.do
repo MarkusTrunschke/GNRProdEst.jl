@@ -112,7 +112,7 @@ clear matrix
 
 gen logomega=vg-ak*k-akk*kk
 gen omega=exp(logomega)
-
+exit
 gen kelas=gk*i+2*gkk*ki + gki*ii/2 + ak + 2*akk*k
 
 /************************************************************/

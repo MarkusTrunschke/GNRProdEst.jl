@@ -1,41 +1,33 @@
 ## Function that converts inputs into correct types for my program
-function GNR_input_cleaner!(;fixed_inputs::Union{Array{Symbol},Symbol}, flex_input::Union{Array{Symbol},Symbol}, all_inputs::Array{Symbol}, stage::Int)
+function GNR_input_cleaner!(;fixed_inputs::Union{Array{Symbol},Symbol}, flex_input::Union{Array{Symbol},Symbol}, all_inputs::Array{Symbol})
     # Convert fixed input into vector of symbols if an array was given
     if typeof(fixed_inputs) == Array || typeof(fixed_inputs) == Matrix{Symbol}
         fixed_inputs = vec(fixed_inputs)
     end
 
-    # # Convert vector of symbols into symbol if there is only one element
-    # if typeof(fixed_inputs) == Vector && size(fixed_inputs) == (1,)
-    #     fixed_inputs = fixed_inputs[1]
-    # end
+    # Convert fixed input to a vector if user put in a symbol. (Makes working with it in the program easier) 
+    if typeof(fixed_inputs) == Symbol
+        fixed_inputs = [fixed_inputs]
+    end
 
     if isdefined(all_inputs,1) == false # Only check first element but that should be enough to see if user provided the input
         all_inputs = [x for sublist in [flex_input, fixed_inputs] for x in (sublist isa Vector ? sublist : [sublist])]
     end
-
-    if stage == 0 # If it runs from the highest level command
-
-    elseif stage == 1 # For inputs that are only present in the first stage
-
-    elseif stage == 2 # For inputs that are only present in the second stage
-
-    end
     
-    return fixed_inputs, flex_input, all_inputs
+    return fixed_inputs, flex_input, all_inputs # Return cleaned inputs
 end
 
 ## Function that checks if every input makes sense and thows an error if the user messed up
 function error_throw_fnc(data::DataFrame, 
-    output::Symbol, 
-    flex_input::Symbol, 
-    fixed_inputs::Union{Symbol,Array{Symbol}}, 
-    ln_share_flex_y_var::Symbol, 
-    id::Symbol, 
-    time::Symbol, 
-    fes_starting_values::Vector{<:Number},
-    ses_starting_values::Vector{<:Number},
-    opts::Dict)
+                         output::Symbol, 
+                         flex_input::Symbol, 
+                         fixed_inputs::Union{Symbol,Array{Symbol}}, 
+                         ln_share_flex_y_var::Symbol, 
+                         id::Symbol, 
+                         time::Symbol, 
+                         fes_starting_values::Union{Vector{Union<:Number}, Vector{Missing}},
+                         ses_starting_values::Union{Vector{Union<:Number}, Vector{Missing}},
+                         opts::Dict)
 
     # Check if variables are actually in DataFrame
     missing_str = string()
@@ -55,8 +47,8 @@ end
 ## Auxiliary function to fill up options that were not given in opts dictionary
 function opts_filler!(opts::Dict)
     
-    if "fes_series_order" ∉ keys(opts)
-        opts["fes_series_order"] = 2
+    if "fes_series_degree" ∉ keys(opts)
+        opts["fes_series_degree"] = 2
     end
     if "fes_print_starting_values" ∉ keys(opts)
         opts["fes_print_starting_values"] = false
@@ -70,8 +62,8 @@ function opts_filler!(opts::Dict)
     if "ses_print_starting_values" ∉ keys(opts)
         opts["ses_print_starting_values"] = false
     end
-    if "ses_series_order" ∉ keys(opts)
-        opts["ses_series_order"] = 2
+    if "ses_series_degree" ∉ keys(opts)
+        opts["ses_series_degree"] = 2
     end
     if "ses_optimizer" ∉ keys(opts)
         opts["ses_optimizer"] = NelderMead()
@@ -147,7 +139,7 @@ function get_input_degree(input::Union{Symbol,Vector{Symbol}}, all_var_symbols::
     i = 2
     for inp in input # Loop over all inputs
         j = 1
-        for sym in all_var_symbols # Iterate over all symbols of the Taylor polynomials
+        for sym in all_var_symbols # Iterate over all symbols of the polynomials
             parts = split(string(sym), "_")
             count_input = count(isequal(string(inp)), parts) # Check for each part if it matches the flexible input symbol and count the occurances
             input_degree_mat[i,j] = count_input
@@ -192,7 +184,13 @@ function startvalues(;data::DataFrame, Y_var::Symbol, X_vars::Union{Symbol,Array
     if print_res == true
         print_tab = hcat(vcat([:constant], X_vars), startvals)
         header = (["Variable", "Value"])
-        println("First "*stage*" starting values:")
+
+        # Make first character uppercase if it is lowercase
+        if islowercase(stage[1]) == true
+            stage = uppercasefirst(stage)
+        end
+
+        println(stage*" starting values:")
         pretty_table(print_tab, header = header)
     end
 
@@ -200,11 +198,11 @@ function startvalues(;data::DataFrame, Y_var::Symbol, X_vars::Union{Symbol,Array
     return startvals
 end
 
-## Taylor Approximation function
-function taylor_series!(;data::DataFrame, var_names::Union{Vector{Symbol},Symbol}, order::Int)
+## Polynomial series generating function
+function polynom_series!(;data::DataFrame, var_names::Union{Vector{Symbol},Symbol}, degree::Int)
 
-    if order > 4
-        throw(error("Taylor series order is too large. The program only supports Taylor series until order 4"))
+    if degree > 4
+        throw(error("Polynomial series degree is too large. The program only supports polynomial series until degree 4"))
     end
 
     if typeof(var_names) == Symbol
@@ -213,37 +211,37 @@ function taylor_series!(;data::DataFrame, var_names::Union{Vector{Symbol},Symbol
 
     nvar = length(var_names)
 
-    taylor_var_names::Array{Symbol} = []
+    poly_var_names::Array{Symbol} = []
 
     # Generate all variables
     for j = 1 : nvar
-        push!(taylor_var_names, var_names[j]) # Add variable name to taylor variable symbol list
+        push!(poly_var_names, var_names[j]) # Add variable name to polynomial variable symbol list
 
-        # If order of taylor approximation is larger than 1
-        if order > 1
+        # If degree of polynomial series is larger than 1
+        if degree > 1
             for i = j : nvar
                 varn = Symbol(String(var_names[j])*"_"*String(var_names[i])) # Generate variable name of new variable
-                push!(taylor_var_names, varn) # Add variable name to taylor variable symbol list
+                push!(poly_var_names, varn) # Add variable name to polynomial variable symbol list
                 if varn ∈ names(data) # Check if variable is already in dataset. If yes: Drop it
                     data = select(data, Not(varn))
                 end
                 data[:, varn] = data[:, var_names[j]] .* data[:,var_names[i]] # Add variable to dataset
 
-                # If order of taylor approximation is larger than 2
-                if order > 2
+                # If degree of polynomial series is larger than 2
+                if degree > 2
                     for u = i : nvar
                         varn = Symbol(String(var_names[j])*"_"*String(var_names[i])*"_"*String(var_names[u])) # generate variable name of new variable
-                        push!(taylor_var_names, varn) # Add variable name to taylor variable symbol list
+                        push!(poly_var_names, varn) # Add variable name to polynomial variable symbol list
                         if varn ∈ names(data) # Check if variable is already in dataset. If yes: Drop it
                             data = select(data, Not(varn))
                         end
                         data[:,varn] = data[:,var_names[j]].*data[:,var_names[i]].*data[:,var_names[u]]
 
-                        # If order of taylor approximation is larger than 3
-                        if order > 3
+                        # If degree of polynomial series is larger than 3
+                        if degree > 3
                             for r = u : nvar
                                 varn = Symbol(String(var_names[j])*"_"*String(var_names[i])*"_"*String(var_names[u])*"_"*String(var_names[r])) # generate variable name of new variable
-                                push!(taylor_var_names, varn) # Add variable name to taylor variable symbol list
+                                push!(poly_var_names, varn) # Add variable name to polynomial variable symbol list
                                 if varn ∈ names(data) # Check if variable is already in dataset. If yes: Drop it
                                     data = select(data, Not(varn))
                                 end
@@ -258,7 +256,7 @@ function taylor_series!(;data::DataFrame, var_names::Union{Vector{Symbol},Symbol
     end
 
     # Return result
-    return taylor_var_names
+    return poly_var_names
 end
 
 ## Polynomial generation function
@@ -318,13 +316,11 @@ function panel_lag(;data::DataFrame, id::Symbol, time::Symbol, variable::Union{S
     new_df = copy(sort(data, [id, time]))
 
     # Drop lag columns if they already exist if force is true. Throw error if not.
-    for var in variable
-        if string(lag_prefix*string(var)) ∈ names(data)
-            if force == true
-                new_df = new_df[!, Not(Symbol(lag_prefix*string(var)))]
-            else
-                throw("Specified name for lag of variable already present in specified dataframe. Either set force = true, choose difference lag variable name, or rename the column.")
-            end
+    if any(in(Symbol.(names(data))), Symbol.(lag_prefix, variable))
+        if force == true
+            data = data[!, Not(filter(in(Symbol.(names(data))), Symbol.(lag_prefix, variable)))]
+        else
+            throw("Specified name for lag of variable already present in specified dataframe. Either set force = true, choose difference lag variable name, or rename the column.")
         end
     end
 
@@ -343,14 +339,12 @@ function panel_lag!(;data::DataFrame, id::Symbol, time::Symbol, variable::Union{
         variable = [variable]
     end
 
-    # Drop lag columns if they already exist if force is true. Throw error if not.
-    for var in variable
-        if string(lag_prefix*string(var)) ∈ names(data)
-            if force == true
-                data = data[!, Not(Symbol(lag_prefix*string(var)))]
-            else
-                throw("Specified name for lag of variable already present in specified dataframe. Either set force = true, choose difference lag variable name, or rename the column.")
-            end
+    if any(in(Symbol.(names(data))), Symbol.(lag_prefix, variable))
+        if force == true
+            select!(data, Not(filter(in(Symbol.(names(data))), Symbol.(lag_prefix, variable))))
+            # df2 = df2[!, Not(Symbol.(lag_prefix, variable))]
+        else
+            throw("Specified name for lag of variable already present in specified dataframe. Either set force = true, choose difference lag variable name, or rename the column.")
         end
     end
 

@@ -1,5 +1,5 @@
 ## General estimation command
-function GNRProd(;data::DataFrame, 
+function gnrprodest(;data::DataFrame, 
                   output::Symbol, 
                   flex_input::Symbol, 
                   fixed_inputs::Union{Symbol,Array{Symbol}}, 
@@ -9,40 +9,113 @@ function GNRProd(;data::DataFrame,
                   fes_starting_values::Vector = [missing],
                   ses_starting_values::Vector = [missing],
                   opts::Dict = Dict())
+
+    est_data = copy(data)
     
+    fes_returns, ses_returns = gnrprodest!(data = est_data, 
+                                                 output = output, 
+                                                 flex_input = flex_input, 
+                                                 fixed_inputs = fixed_inputs, 
+                                                 ln_share_flex_y_var = ln_share_flex_y_var, 
+                                                 id = id, 
+                                                 time = time, 
+                                                 fes_starting_values = fes_starting_values,
+                                                 ses_starting_values = ses_starting_values,
+                                                 opts = opts)
+    
+    return fes_returns, ses_returns, est_data[!, ]
+end
+
+function gnrprodest!(;data::DataFrame, 
+                  output::Symbol, 
+                  flex_input::Symbol, 
+                  fixed_inputs::Union{Symbol,Array{Symbol}}, 
+                  ln_share_flex_y_var::Symbol = :NotDefinedByUser, 
+                  id::Symbol, 
+                  time::Symbol, 
+                  fes_starting_values::Vector = [missing],
+                  ses_starting_values::Vector = [missing],
+                  opts::Dict = Dict())
+
+
     # Clean inputs to be of the correct types
-    fixed_inputs = GNR_input_cleaner!(fixed_inputs = fixed_inputs, flex_input = flex_input, all_inputs = all_inputs, stage = 0)
+    fixed_inputs, flex_input, all_inputs = GNR_input_cleaner!(fixed_inputs = fixed_inputs, flex_input = flex_input, all_inputs = Array{Symbol}(undef,1,1))
 
     # Throw error if user messed up
-    error_throw_fnc(data,output,flex_input,fixed_inputs,ln_share_flex_y_var,id,time,fes_starting_values,ses_starting_values,opts)
+    error_throw_fnc(data, output, flex_input, fixed_inputs, ln_share_flex_y_var, id, time, fes_starting_values, ses_starting_values, opts)
 
     # Get additional options right
     opts = opts_filler!(opts)
 
     ## Run data preparation to ensure inputs are working with internals
-    est_df, all_input_symbols, ln_share_flex_y_var = prep_data!(data, output = output, flex_input = flex_input, fixed_inputs = fixed_inputs, ln_share_flex_y_var = ln_share_flex_y_var, id = id, time = time)
+    prep_data!(data, output = output, flex_input = flex_input, fixed_inputs = fixed_inputs, ln_share_flex_y_var = ln_share_flex_y_var, id = id, time = time)
 
     ## Run first stage estimation
-    fes_returns = GNRFirstStage!(est_df = est_df, output = output, flex_input = flex_input, fixed_inputs = fixed_inputs, ln_share_flex_y_var = ln_share_flex_y_var, all_input_symbols = all_input_symbols, starting_values = fes_starting_values, opts = opts)
+    fes_returns = GNRFirstStage!(est_df = data, output = output, flex_input = flex_input, fixed_inputs = fixed_inputs, ln_share_flex_y_var = ln_share_flex_y_var, all_input_symbols = all_inputs, starting_values = fes_starting_values, opts = opts)
 
     ## Run second stage estimation
-    ses_returns = GNRSecondStage!(est_df = fes_returns("estimation_sample"), id = id, time = time, fixed_inputs = fixed_inputs, flex_input = flex_input, starting_values = ses_starting_values, w_degree = 1, called_from_GNRProd = true, fes_returns = fes_returns, opts = opts)
+    ses_returns = GNRSecondStage!(est_df = data, id = id, time = time, fixed_inputs = fixed_inputs, flex_input = flex_input, starting_values = ses_starting_values, lm_tfp_degree = 1, called_from_GNRProd = true, fes_returns = fes_returns, opts = opts)
+
+    # fes_returns, ses_returns = GNRProdEstimation!(;data = data, 
+    #                                               output = output, 
+    #                                               flex_input = flex_input, 
+    #                                               fixed_inputs = fixed_inputs, 
+    #                                               ln_share_flex_y_var = ln_share_flex_y_var, 
+    #                                               id = id, 
+    #                                               time = time, 
+    #                                               fes_starting_values = fes_starting_values,
+    #                                               ses_starting_values = ses_starting_values,
+    #                                               opts = opts)
 
     return fes_returns, ses_returns
+end
+
+## Function that 
+function GNRProdEstimation!(;data::DataFrame, 
+                            output::Symbol, 
+                            flex_input::Symbol, 
+                            fixed_inputs::Union{Symbol,Array{Symbol}}, 
+                            ln_share_flex_y_var::Symbol = :NotDefinedByUser, 
+                            id::Symbol, 
+                            time::Symbol, 
+                            fes_starting_values::Vector = [missing],
+                            ses_starting_values::Vector = [missing],
+                            opts::Dict = Dict())
+
+     # Clean inputs to be of the correct types
+     fixed_inputs = GNR_input_cleaner!(fixed_inputs = fixed_inputs, flex_input = flex_input, all_inputs = all_inputs)
+
+     # Throw error if user messed up
+     error_throw_fnc(data,output,flex_input,fixed_inputs,ln_share_flex_y_var,id,time,fes_starting_values,ses_starting_values,opts)
+ 
+     # Get additional options right
+     opts = opts_filler!(opts)
+ 
+     ## Run data preparation to ensure inputs are working with internals
+     est_df, all_input_symbols, ln_share_flex_y_var = prep_data!(data, output = output, flex_input = flex_input, fixed_inputs = fixed_inputs, ln_share_flex_y_var = ln_share_flex_y_var, id = id, time = time)
+ 
+     ## Run first stage estimation
+     fes_returns = GNRFirstStage!(est_df = est_df, output = output, flex_input = flex_input, fixed_inputs = fixed_inputs, ln_share_flex_y_var = ln_share_flex_y_var, all_input_symbols = all_input_symbols, starting_values = fes_starting_values, opts = opts)
+ 
+     ## Run second stage estimation
+     ses_returns = GNRSecondStage!(est_df = fes_returns("estimation_sample"), id = id, time = time, fixed_inputs = fixed_inputs, flex_input = flex_input, starting_values = ses_starting_values, lm_tfp_degree = 1, called_from_GNRProd = true, fes_returns = fes_returns, opts = opts)
+ 
+     return fes_returns, ses_returns
+
 end
 ## First stage function
 function GNRFirstStage!(;est_df, output::Symbol, flex_input::Union{Symbol,Array{Symbol}}, fixed_inputs::Union{Symbol,Array{Symbol}}, ln_share_flex_y_var::Symbol, all_input_symbols::Array{Symbol} = Array{Symbol}(undef,1,1), starting_values::Vector = [missing], opts::Dict=Dict())
     
-    GNR_input_cleaner!(fixed_inputs = fixed_inputs, flex_input = flex_input, all_inputs = all_input_symbols, stage = 1)
+    GNR_input_cleaner!(fixed_inputs = fixed_inputs, flex_input = flex_input, all_inputs = all_input_symbols)
     
-    # Get Taylor polynomials
-    taylor_input_symbols = taylor_series!(data = est_df, var_names = all_input_symbols, order = opts["fes_series_order"])
+    # Get Polynomial series
+    polynom_input_symbols = polynom_series!(data = est_df, var_names = all_input_symbols, degree = opts["fes_series_degree"])
 
     # Run first stage estimation
-    γ_dash = fes_est(data=est_df, ln_share_flex_y_var=ln_share_flex_y_var, input_var_symbols=taylor_input_symbols, method = opts["fes_method"], starting_values = starting_values, opts = opts)
+    γ_dash = fes_est(data=est_df, ln_share_flex_y_var = ln_share_flex_y_var, input_var_symbols = polynom_input_symbols, method = opts["fes_method"], starting_values = starting_values, opts = opts)
     
     # Calculate some quantities
-    fes_res, E = fes_predictions!(data = est_df, ln_share_flex_y_var = ln_share_flex_y_var, flex_input = flex_input, input_var_symbols=taylor_input_symbols, γ_dash = γ_dash, output = output)
+    fes_res, E = fes_predictions!(data = est_df, ln_share_flex_y_var = ln_share_flex_y_var, flex_input = flex_input, input_var_symbols = polynom_input_symbols, γ_dash = γ_dash, output = output)
 
     # Print results
     if opts["fes_print_results"] == true
@@ -54,19 +127,38 @@ function GNRFirstStage!(;est_df, output::Symbol, flex_input::Union{Symbol,Array{
                            "γ_dash" => γ_dash,
                            "γ_flex" => fes_res.γ_flex,
                            "E" => E,
-                           "taylor_series" => taylor_input_symbols,
+                           "polynom_series" => polynom_input_symbols,
                            "all_inputs" => all_input_symbols,
                            "fes_estimates" => fes_res,
-                           "estimation_data" => est_df
                            )
 
     return return_elements
 end
 
+## First stage estimation function that does not modify inputs (wrapper that copies inputs before passing it on)
+function GNRFirstStage(;est_df, output::Symbol, flex_input::Union{Symbol,Array{Symbol}}, fixed_inputs::Union{Symbol,Array{Symbol}}, ln_share_flex_y_var::Symbol, all_input_symbols::Array{Symbol} = Array{Symbol}(undef,1,1), starting_values::Vector = [missing], opts::Dict=Dict())
+
+    # Copy data s.t. the program does not modify existing data
+    est_df = copy(est_df)
+
+    # Run input-modifying version
+    return_elements = GNRFirstStage!(est_df = est_df,
+                                     output = output, 
+                                     flex_input = flex_input,
+                                     fixed_inputs = fixed_inputs, 
+                                     ln_share_flex_y_var = ln_share_flex_y_var, 
+                                     all_input_symbols = all_input_symbols, 
+                                     starting_values = starting_values, 
+                                     opts = opts)
+
+    # Return first stage results and dataframe with new variables
+    return return_elements, est_df
+end
+
 ## First stage estimation function
 function fes_est(; data::DataFrame, ln_share_flex_y_var::Symbol, input_var_symbols::Array{Symbol}, method::String, starting_values::Vector, opts::Dict)
     
-    if method == "OLS" # The GNR replication code uses a non-linear regression of the shares onto the natural logarithm of the taylor polynomials for the first stage. However, this seems unnecessary. I cannot see any reason not to simply take the exponential of the shares onto the taylor polynomials. This is a linear regression estimated by OLS. It is much faster to calculate and much more robust because it is not a numerical optimization but has a simple analytical solution.
+    if method == "OLS" # The GNR replication code uses a non-linear regression of the shares onto the natural logarithm of the polynomials for the first stage. However, this seems unnecessary. I cannot see any reason not to simply take the exponential of the shares onto the polynomials. This is a linear regression estimated by OLS. It is much faster to calculate and much more robust because it is not a numerical optimization but has a simple analytical solution.
         # Define matrices for OLS
         Y = exp.(data[:,ln_share_flex_y_var])
         X = hcat(data.constant, Matrix(data[:,input_var_symbols]))
@@ -101,11 +193,13 @@ end
 ## Function to calculate quantities in the first stage (after estimation)
 function fes_predictions!(;data::DataFrame, ln_share_flex_y_var::Symbol, flex_input::Symbol, input_var_symbols::Array{Symbol}, γ_dash::Vector{<:Number}, output)
     
+    flex_elas_sym = Symbol(flex_input, "_elas")
+    
     # Define matrices for OLS
     X_symbols = vcat(:constant, input_var_symbols)
     X = Matrix(data[!, X_symbols]) # hcat(data.constant, Matrix(data[:,input_var_symbols]))
 
-    # Calculate flexible input elasticity
+    ## Calculate flexible input elasticity
     data.ln_D_E = log.(X*γ_dash) # Eq. (21)
     data.D_E = X*γ_dash
 
@@ -119,7 +213,7 @@ function fes_predictions!(;data::DataFrame, ln_share_flex_y_var::Symbol, flex_in
     γ = γ_dash ./ E # Below Eq. (21)
 
     # Calculate elasticity of the flexible input
-    data.flex_elas = data.D_E / E # Eq. (14) (same as X*γ)
+    data[!, flex_elas_sym] = data.D_E / E # Eq. (14) (same as X*γ)
     
     # Calculate the integral (This part does the same as the R command (gnrflex) but differs from GNR's replication code. They never correct their coefficients for E.)
     # Get degree of intermediate input
@@ -129,7 +223,7 @@ function fes_predictions!(;data::DataFrame, ln_share_flex_y_var::Symbol, flex_in
     data.int_flex = X*γ_flex .* data[! ,flex_input] # Multiply by flex input to add the + 1
 
     # Calculate \mathcal(Y) (From eq. (16) and hint on p.2995)
-    data.weird_Y = data[!, output] - data.int_flex - data.ϵ
+    data.mathcal_Y = data[!, output] - data.int_flex - data.ϵ
 
     # Put results in DataFrame
     fes_res_df = DataFrame(Variable = X_symbols, γ = γ, γ_dash = γ_dash, γ_flex = γ_flex)
@@ -150,81 +244,114 @@ function fes_print_res(fes_res::DataFrame)
     return nothing
 end
 
-# Second stage estimation function
-function GNRSecondStage!(;est_df::DataFrame, flex_input::Symbol, fixed_inputs::Union{Array{Symbol},Symbol}, all_inputs = Array{Symbol}(undef, size(hcat(fixed_inputs, flex_input))) , id::Symbol, time::Symbol, fes_returns::Dict, weird_Y_var::Symbol = :weird_Y, w_degree::Int = 3, called_from_GNRProd::Bool = false, starting_values::Vector = [missing], opts::Dict= Dict())
+## Second stage estimation function
+function GNRSecondStage!(;est_df::DataFrame, flex_input::Symbol, fixed_inputs::Union{Array{Symbol},Symbol}, all_inputs = Array{Symbol}(undef, size(hcat(fixed_inputs, flex_input))) , id::Symbol, time::Symbol, fes_returns::Dict, mathcal_Y_var::Symbol = :mathcal_Y, lm_tfp_degree::Int = 3, called_from_GNRProd::Bool = false, starting_values::Vector = [missing], opts::Dict= Dict())
 
     # Clean inputs to be of the correct types
-    fixed_inputs, flex_input, all_inputs = GNR_input_cleaner!(fixed_inputs = fixed_inputs, flex_input = flex_input, all_inputs = all_inputs, stage = 2)
+    fixed_inputs, flex_input, all_inputs = GNR_input_cleaner!(fixed_inputs = fixed_inputs, flex_input = flex_input, all_inputs = all_inputs)
 
     # Get additional options right
     if called_from_GNRProd == false
         opts = opts_filler!(opts)
     end
-    
+
     # Get starting values for GMM (Follow replication code of GNR for now)
-    taylor_fixed = Array{Symbol}[]
-    if called_from_GNRProd == true # If called from within GNRProd, taylor polynomials already exist. Use pure fixed input polynomials (as in GNR replication code)
-        if typeof(fixed_inputs) == Symbol && opts["ses_series_order"] == 1 # If there is only one fixed input and the taylor order is one, there is no need to select the correct taylor polynomials
-            taylor_fixed = fixed_inputs
+    fixed_poly = Array{Symbol}[]
+    if called_from_GNRProd == true # If called from within GNRProd, polynomials already exist. Use pure fixed input polynomials (as in GNR replication code)
+        if typeof(fixed_inputs) == Symbol && opts["int_const_series_degree"] == 1 # If there is only one fixed input and the polynomail degree is one, there is no need to select the correct polynomials
+            fixed_poly = fixed_inputs
         else
-            s_vec = string.(fes_returns["taylor_series"])
+            s_vec = string.(fes_returns["polynom_series"])
             strings_to_check = string.(fixed_inputs)
 
-            taylor_series_checked = check_array_string_only_substrings(s_vec = s_vec, strings_to_check = strings_to_check)
-            taylor_fixed = Symbol.(taylor_series_checked[findall(taylor_series_checked[:, 2]), :][:,1])
+            polynom_series_checked = check_array_string_only_substrings(s_vec = s_vec, strings_to_check = strings_to_check)
+            fixed_poly = Symbol.(polynom_series_checked[findall(polynom_series_checked[:, 2]), :][:,1])
         end
-    else # If not called from within GNRProd, generate taylor polynomials from fixed inputs
-        taylor_fixed = taylor_series!(data = est_df, var_names = fixed_inputs, order = opts["ses_series_order"])
+    else # If not called from within GNRProd, generate polynomials from fixed inputs
+        fixed_poly = polynom_series!(data = est_df, var_names = fixed_inputs, degree = opts["int_const_series_degree"])
     end
     
-    ses_starting_values = startvalues(data = est_df, Y_var = :weird_Y, X_vars = taylor_fixed, user_start_vals = starting_values, stage = "secod stage", print_res =  opts["ses_print_starting_values"])[2:end]
+    ses_starting_values = startvalues(data = est_df, Y_var = :mathcal_Y, X_vars = fixed_poly, user_start_vals = starting_values, stage = "second stage", print_res =  opts["ses_print_starting_values"])[2:end]
     
     # Calculate some lags
-    est_df = panel_lag(data = est_df, id = id, time = time, variable = [weird_Y_var, taylor_fixed...], lag_prefix = "lag_", lags = 1, drop_missings = true, force = true)
+    panel_lag!(data = est_df, id = id, time = time, variable = [mathcal_Y_var, fixed_poly...], lag_prefix = "lag_", lags = 1, drop_missings = true, force = true)
 
     # Run estimation
-    ses_gmm_res = ses_est(;data = est_df, starting_values = ses_starting_values, taylor_fixed = taylor_fixed, weird_Y_var = weird_Y_var, w_degree = w_degree, opts = opts)
+    ses_gmm_res = ses_est(;data = est_df, starting_values = ses_starting_values, fixed_poly = fixed_poly, mathcal_Y_var = mathcal_Y_var, lm_tfp_degree = lm_tfp_degree, opts = opts)
 
     # Calculate some quantities
-    ses_quant_res = ses_predictions!(data = est_df, weird_Y_var = weird_Y_var, flex_input = flex_input, fixed_inputs = fixed_inputs, taylor_fixed = taylor_fixed, fes_returns = fes_returns, α = Optim.minimizer(ses_gmm_res))
+    ses_quant_res = ses_predictions!(data = est_df, mathcal_Y_var = mathcal_Y_var, flex_input = flex_input, fixed_inputs = fixed_inputs, fixed_poly = fixed_poly, fes_returns = fes_returns, α = Optim.minimizer(ses_gmm_res))
 
     # Print results
     if opts["ses_print_results"] == true
         ses_print_res(data = est_df, fixed_inputs = fixed_inputs)
     end
-    return ses_quant_res
+
+    # Put return objects into dictionary
+    ses_returns = Dict("gmm_info" => ses_gmm_res,
+                       "polynom_fixed" => fixed_poly,
+                       "fixed_inputs" => fixed_inputs,
+                       "flexible_input" => flex_input,
+
+    )
+
+    return ses_returns
 end
 
-# Second stage estimation function
-function ses_est(;data::DataFrame, taylor_fixed::Vector{Symbol}, starting_values::Vector, weird_Y_var::Symbol, w_degree::Int = 3, opts::Dict)
+## Second stage estimation function that does not modify inputs (wrapper that copies inputs before passing it on)
+function GNRSecondStage(;est_df::DataFrame, flex_input::Symbol, fixed_inputs::Union{Array{Symbol},Symbol}, all_inputs = Array{Symbol}(undef, size(hcat(fixed_inputs, flex_input))), id::Symbol, time::Symbol, fes_returns::Dict, mathcal_Y_var::Symbol = :mathcal_Y, lm_tfp_degree::Int = 3, called_from_GNRProd::Bool = false, starting_values::Vector = [missing], opts::Dict= Dict())
+
+   # Copy data s.t. the program does not modify existing data
+   est_df = copy(est_df)
+
+   # Run input-modifying version
+   ses_quant_res = GNRSecondStage!(est_df = est_df,
+                   flex_input = flex_input, 
+                   fixed_inputs = fixed_inputs, 
+                   all_inputs = all_inputs, 
+                   id = id, 
+                   time = time, 
+                   fes_returns = fes_returns, 
+                   mathcal_Y_var = mathcal_Y_var, 
+                   lm_tfp_degree = lm_tfp_degree, 
+                   called_from_GNRProd = called_from_GNRProd, 
+                   starting_values = starting_values, 
+                   opts = opts)
+
+    # Return second stage returns and modified dataframe
+    return ses_quant_res, est_df
+end
+
+## Second stage estimation function
+function ses_est(;data::DataFrame, fixed_poly::Vector{Symbol}, starting_values::Vector, mathcal_Y_var::Symbol, lm_tfp_degree::Int = 3, opts::Dict)
 
     ## Run GMM estimation
     # Preallocate inputs
-    taylor_fixed_mat = Array(data[!, taylor_fixed])
-    taylor_fixed_lag_mat = Array(data[!, "lag_" .* string.(taylor_fixed)])
-    constant = vec(ones(size(taylor_fixed_mat)[1],1))
-    w_lag_mat = Array{Float64}(undef, length(constant), w_degree)
-    weird_Y_vec = vec(data[!, weird_Y_var])
-    lag_weird_Y_vec = vec(data[!, Symbol("lag_",weird_Y_var)])
+    fixed_poly_mat = Array(data[!, fixed_poly])
+    fixed_poly_lag_mat = Array(data[!, "lag_" .* string.(fixed_poly)])
+    constant = vec(ones(size(fixed_poly_mat)[1],1))
+    w_lag_mat = Array{Float64}(undef, length(constant), lm_tfp_degree)
+    mathcal_Y_vec = vec(data[!, mathcal_Y_var])
+    lag_mathcal_Y_vec = vec(data[!, Symbol("lag_",mathcal_Y_var)])
 
     # Prepare cache
     c = (X = hcat(constant, w_lag_mat),
          cache1 = Array{Float64}(undef, length(constant), 1),
          cache2 = Array{Float64}(undef, length(constant), 1),
-         cache3 = Array{Float64}(undef, 1 + w_degree, 1 + w_degree),
-         cache4 = Array{Float64}(undef, size(taylor_fixed_lag_mat)),
-         cache5 = Array{Float64}(undef, 1, size(taylor_fixed_lag_mat)[2]),
-         coefs  = Array{Float64}(undef, 1 + w_degree, 1), # 1+ w_degree b/c of constant
+         cache3 = Array{Float64}(undef, 1 + lm_tfp_degree, 1 + lm_tfp_degree),
+         cache4 = Array{Float64}(undef, size(fixed_poly_lag_mat)),
+         cache5 = Array{Float64}(undef, 1, size(fixed_poly_lag_mat)[2]),
+         coefs  = Array{Float64}(undef, 1 + lm_tfp_degree, 1), # 1 + lm_tfp_degree b/c of constant
          criterion = Array{Float64}(undef, 1, 1)
     )
 
     # Minimize GMM criterion function
     gmm_res = optimize(par -> ses_gmm!(α = par, 
-                                       weird_Y_vec = weird_Y_vec, 
-                                       lag_weird_Y_vec = lag_weird_Y_vec, 
-                                       taylor_fixed_mat = taylor_fixed_mat, 
-                                       taylor_fixed_lag_mat = taylor_fixed_lag_mat, 
-                                       w_degree = w_degree, 
+                                       mathcal_Y_vec = mathcal_Y_vec, 
+                                       lag_mathcal_Y_vec = lag_mathcal_Y_vec, 
+                                       fixed_poly_mat = fixed_poly_mat, 
+                                       fixed_poly_lag_mat = fixed_poly_lag_mat, 
+                                       lm_tfp_degree = lm_tfp_degree, 
                                        c = c), 
                        starting_values,
                        opts["ses_optimizer"], 
@@ -234,22 +361,22 @@ function ses_est(;data::DataFrame, taylor_fixed::Vector{Symbol}, starting_values
     return gmm_res
 end
 
-# GMM criterion function
+## GMM criterion function
 function ses_gmm!(;α::Array{<:Number},
-                   weird_Y_vec::Vector{<:Number},
-                   lag_weird_Y_vec::Vector{<:Number}, 
-                   taylor_fixed_mat::Array{<:Number},
-                   taylor_fixed_lag_mat::Array{<:Number},
-                   w_degree::Int,
+                   mathcal_Y_vec::Vector{<:Number},
+                   lag_mathcal_Y_vec::Vector{<:Number}, 
+                   fixed_poly_mat::Array{<:Number},
+                   fixed_poly_lag_mat::Array{<:Number},
+                   lm_tfp_degree::Int,
                    c::NamedTuple)
 
     # Calculate w and X
-    mul!(c.cache1, taylor_fixed_mat, α)
-    c.cache1 .= weird_Y_vec .- c.cache1 # c.cache1 is now w
-    mul!(c.cache2, taylor_fixed_lag_mat, α)
-    c.X[:,2] .= lag_weird_Y_vec .- c.cache2 # X = hcat(constant, w_lag_mat)
+    mul!(c.cache1, fixed_poly_mat, α)
+    c.cache1 .= mathcal_Y_vec .- c.cache1 # c.cache1 is now w
+    mul!(c.cache2, fixed_poly_lag_mat, α)
+    c.X[:,2] .= lag_mathcal_Y_vec .- c.cache2 # X = hcat(constant, w_lag_mat)
 
-    polynomial_fnc_fast!(@view(c.X[:,2:end]), w_degree, par_cal = false) # Fill X with polynomials of w
+    polynomial_fnc_fast!(@view(c.X[:,2:end]), lm_tfp_degree, par_cal = false) # Fill X with polynomials of w
 
     # OLS
     mul!(c.cache3, c.X', c.X) # X'X
@@ -261,19 +388,19 @@ function ses_gmm!(;α::Array{<:Number},
     c.cache1 .= c.cache1 .- c.cache2 # c.cache1 is now residuals
 
     # Calculate moments
-    c.cache4 .= taylor_fixed_mat .* c.cache1
-    sum!(c.cache5, c.cache4) # Vector of moments ( taylor_fixed_mat .* c.cache1 =: Matrix of moment vectors where each column is one moment vector)
+    c.cache4 .= fixed_poly_mat .* c.cache1
+    sum!(c.cache5, c.cache4) # Vector of moments ( fixed_poly_mat .* c.cache1 =: Matrix of moment vectors where each column is one moment vector)
     c.cache5 .= c.cache5 ./ length(c.cache1)
 
     # Return
     return mul!(c.criterion,c.cache5, c.cache5')[1] # Return criterion value (moment_vector * transposed(moment_vector))
 end
 
-# Function to calculate some quantities with results from second stage GMM estimation
-function ses_predictions!(;data::DataFrame, weird_Y_var::Symbol, flex_input::Symbol, fixed_inputs::Union{Symbol,Vector{Symbol}}, taylor_fixed::Vector{Symbol}, α::Vector{<:Number}, fes_returns::Dict )
+## Function to calculate some quantities with results from second stage GMM estimation
+function ses_predictions!(;data::DataFrame, mathcal_Y_var::Symbol, flex_input::Symbol, fixed_inputs::Union{Symbol,Vector{Symbol}}, fixed_poly::Vector{Symbol}, α::Vector{<:Number}, fes_returns::Dict )
 
     # log(TFP) and TFP
-    data.ω = data[!, weird_Y_var] .- Array(data[!, taylor_fixed])*α
+    data.ω = data[!, mathcal_Y_var] .- Array(data[!, fixed_poly])*α
     data.Ω = exp.(data.ω)
     data.v = data.ω .* data.ϵ # ϵ = residulas from first stage
 
@@ -281,7 +408,7 @@ function ses_predictions!(;data::DataFrame, weird_Y_var::Symbol, flex_input::Sym
     # First part: ∂C(fixed_inputs)/∂fixed_inputs
     # 1. Match all polynomial series variables to one lower polynomial
     all_inputs = fes_returns["all_inputs"]
-    series_degree = get_input_degree(all_inputs, fes_returns["taylor_series"]) # Degree of input in polynomial series
+    series_degree = get_input_degree(all_inputs, fes_returns["polynom_series"]) # Degree of input in polynomial series
 
     # Preallocate output matrix
     constants = Array{Float64}(undef, length(data.ω), size(series_degree)[1] - 2)
@@ -311,12 +438,12 @@ function ses_predictions!(;data::DataFrame, weird_Y_var::Symbol, flex_input::Sym
         end
         
         # Select columns from data that correspond to the correct polynomials. If match_arr == 0, there needs to be a constant.
-        deriv_C = Array{Float64}(undef, size(data[!, weird_Y_var])[1], size(match_arr)[2])
+        deriv_C = Array{Float64}(undef, size(data[!, mathcal_Y_var])[1], size(match_arr)[2])
         for col in 1:size(match_arr,2)
             if match_arr[2,col] == 0
                 deriv_C[:,col] .= 1
             else
-                deriv_C[:,col] .= data[!,fes_returns["taylor_series"][match_arr[2,col]]]
+                deriv_C[:,col] .= data[!,fes_returns["polynom_series"][match_arr[2,col]]]
             end
         end
         
@@ -352,12 +479,12 @@ function ses_predictions!(;data::DataFrame, weird_Y_var::Symbol, flex_input::Sym
         end
 
         # Select columns from data that correspond to the correct polynomials. If match_arr == 0, there needs to be a constant.
-        deriv_noC = Array{Float64}(undef, size(data[!, weird_Y_var])[1], size(match_arr)[2])
+        deriv_noC = Array{Float64}(undef, size(data[!, mathcal_Y_var])[1], size(match_arr)[2])
         for col in 1:size(match_arr,2)
             if match_arr[2,col] == 0
                 deriv_noC[:,col] .= 0
             else
-                deriv_noC[:,col] .= data[!,fes_returns["taylor_series"][match_arr[2,col]]]
+                deriv_noC[:,col] .= data[!,fes_returns["polynom_series"][match_arr[2,col]]]
             end
         end
 
