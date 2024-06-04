@@ -71,14 +71,15 @@ GNR_MC_sample$errors <- gnr_FS$elas$residuals
 GNR_MC_sample$k2 <- GNR_MC_sample$k * runif(length(GNR_MC_sample$k))
 
 write.csv(GNR_MC_sample, "C:/Users/marku/Documents/GNRProdEst/Other Programs/GNR/Cleaned version of Table_1/cd_data_500_w_fs.csv")
+GNR_MC_data <- read.csv("C:/Users/marku/Documents/GNRProdEst/Other Programs/GNR/Cleaned version of Table_1/cd_data_500.csv")
 
 gnr_FS <- gnrflex(output = "yg",
-                   fixed = c("k", "k2"),
+                   fixed = "k",
                    flex = "i",
                    id = "id",
                    time = "time",
                    share = "si",
-                   data = GNR_MC_sample,
+                   data = GNR_MC_data,
                    control = list(degree = 2, maxit = 2000))
 
 gnr_SES <- gnriv(object = gnr_FS, control = list(trace = 6, 
@@ -121,3 +122,35 @@ gnr_est <- gnrprod(data = test_sample,
                    share = "m_y_share",
                    ss_control = list(method = "BFGS", trace = 1, maxit = 20000)) # nolint
 summary(gnr_est) # Converges but gives results that are far from the true parameters
+
+
+
+
+
+
+
+
+
+
+library(gnrprod)
+
+require(gnrprod)
+#> Loading required package: gnrprod
+
+colombian_data = read.csv(file = "C:/Users/marku/Documents/GNRProdEst/Other Programs/R-version/Columbia_311.csv")
+
+# load Colombian plant-level data
+data <- colombian_data
+
+# estimate production function parameters and productivity
+gnr_fit <- gnrprod(output = "RGO", fixed = c("L", "K"), flex = "RI",
+                   share = "share", id = "id", time = "year", data = data)
+
+gnr_fit$first_stage
+# print results
+gnr_fit
+#> Gross Output Function:
+#>   output:  "RGO" 
+#>   fixed inputs:  c("L", "K") 
+#>   flexible inputs:  "RI" 
+#>   data: da

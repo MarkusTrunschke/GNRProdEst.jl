@@ -71,18 +71,65 @@ data_R.weird_Y = data_R.big_Y
 data_R.constant = ones(length(data_R.id))
 data_R.k2 = data_R.k .* rand(Float64, length(data_R.k))
 
-fes_res, est_df = GNRProdEst.GNRFirstStage(est_df = data_R, output = :yg, flex_input = :i, fixed_inputs = [:k], ln_share_flex_y_var = :si, all_input_symbols = [:k, :i], opts = opts);
-ses_res = GNRProdEst.GNRSecondStage(est_df = est_df, id = :id, time = :time, fixed_inputs = :k, flex_input = :i, lm_tfp_degree = 1, fes_returns = fes_res, opts = opts);
+fes_res, est_df = GNRProdEst.gnrfirststage(est_df = data_R, output = :yg, flexible_input = :i, fixed_inputs = [:k], ln_share_flex_y_var = :si, all_input_symbols = [:k, :i], opts = opts);
+ses_res = GNRProdEst.gnrsecondstage(est_df = est_df, id = :id, time = :time, fixed_inputs = :k, flexible_input = :i, lm_tfp_degree = 1, fes_returns = fes_res, opts = opts);
 
-fes_res = GNRProdEst.GNRFirstStage!(est_df = data_R, output = :yg, flex_input = :i, fixed_inputs = [:k], ln_share_flex_y_var = :si, all_input_symbols = [:k, :i], opts = opts);
-ses_res = GNRProdEst.GNRSecondStage!(est_df = data_R, id = :id, time = :time, fixed_inputs = :k, flex_input = :i, lm_tfp_degree = 1, fes_returns = fes_res, opts = opts);
+fes_res = GNRProdEst.gnrfirststage!(est_df = data_R, output = :yg, flexible_input = :i, fixed_inputs = [:k], ln_share_flex_y_var = :si, all_input_symbols = [:k, :i], opts = opts);
+ses_res = GNRProdEst.gnrsecondstage!(est_df = data_R, id = :id, time = :time, fixed_inputs = :k, flexible_input = :i, lm_tfp_degree = 1, fes_returns = fes_res, opts = opts);
 
 
 gnr_res = GNRProdEst.gnrprodest!(data = data_R, 
                                 output = :yg, 
-                                flex_input = :i, 
+                                flexible_input = :i, 
                                 fixed_inputs = :k, 
                                 ln_share_flex_y_var = :si, 
                                 id = :id, 
                                 time = :time,
                                 opts = opts);
+
+
+
+# Test with Colombian data
+colombian_data = CSV.read("C:/Users/marku/Documents/GNRProdEst/Other Programs/R-version/Columbia_311.csv", DataFrame)
+
+
+gnrprod(output = "RGO", fixed = c("L", "K"), flex = "RI",
+                   share = "share", id = "id", time = "year", data = data)
+
+
+opts = Dict("fes_series_degree" => 2,
+            "fes_method" => "OLS", # OLS is experimental. It gives (almost) the same results but the residual is slightly different. However, it does not seem to matter too much when you check the second stage results
+            "fes_print_starting_values" => true,
+            "fes_print_results" => true,
+            "int_const_series_degree" => 2,
+            "lm_tfp_degree" => 1,
+            "ses_optimizer" => NelderMead(),
+            "ses_optimizer_options" =>  Optim.Options(
+                                       f_tol = 1e-9,
+                                       x_tol = 1e-2,
+                                       g_tol = 1e-10,),
+            "ses_print_starting_values" => true,
+            "ses_print_results" => true)
+
+
+opts = Dict("fes_series_degree" => 2,
+            "fes_method" => "OLS", # OLS is experimental. It gives (almost) the same results but the residual is slightly different. However, it does not seem to matter too much when you check the second stage results
+            "fes_print_starting_values" => true,
+            "fes_print_results" => true)
+
+colombian_data.k = log.(colombian_data.K)
+colombian_data.l = log.(colombian_data.L)
+colombian_data.ri = log.(colombian_data.ri)
+
+
+gnr_res = GNRProdEst.gnrprodest!(data = colombian_data, 
+                                output = :RGO, 
+                                flexible_input = :RI, 
+                                fixed_inputs = [:K :L], 
+                                ln_share_flex_y_var = :share, 
+                                id = :id, 
+                                time = :year,
+                                opts = opts);
+
+
+industry_311 = CSV.read("C:/Users/marku/Documents/GNRProdEst/Other Programs/GNR/Tables_2_3/Colombia/311/data_col_boot.csv", DataFrame)

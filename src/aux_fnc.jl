@@ -1,5 +1,5 @@
 ## Function that converts inputs into correct types for my program
-function GNR_input_cleaner!(;fixed_inputs::Union{Array{Symbol},Symbol}, flex_input::Union{Array{Symbol},Symbol}, all_inputs::Array{Symbol})
+function GNR_input_cleaner!(;fixed_inputs::Union{Array{Symbol},Symbol}, flexible_input::Union{Array{Symbol},Symbol}, all_inputs::Array{Symbol})
     # Convert fixed input into vector of symbols if an array was given
     if typeof(fixed_inputs) == Array || typeof(fixed_inputs) == Matrix{Symbol}
         fixed_inputs = vec(fixed_inputs)
@@ -11,16 +11,16 @@ function GNR_input_cleaner!(;fixed_inputs::Union{Array{Symbol},Symbol}, flex_inp
     end
 
     if isdefined(all_inputs,1) == false # Only check first element but that should be enough to see if user provided the input
-        all_inputs = [x for sublist in [flex_input, fixed_inputs] for x in (sublist isa Vector ? sublist : [sublist])]
+        all_inputs = [x for sublist in [flexible_input, fixed_inputs] for x in (sublist isa Vector ? sublist : [sublist])]
     end
     
-    return fixed_inputs, flex_input, all_inputs # Return cleaned inputs
+    return fixed_inputs, flexible_input, all_inputs # Return cleaned inputs
 end
 
 ## Function that checks if every input makes sense and thows an error if the user messed up
 function error_throw_fnc(data::DataFrame, 
                          output::Symbol, 
-                         flex_input::Symbol, 
+                         flexible_input::Symbol, 
                          fixed_inputs::Union{Symbol,Array{Symbol}}, 
                          ln_share_flex_y_var::Symbol, 
                          id::Symbol, 
@@ -31,7 +31,7 @@ function error_throw_fnc(data::DataFrame,
 
     # Check if variables are actually in DataFrame
     missing_str = string()
-    all_var_symbols = [x for sublist in [output, flex_input, fixed_inputs, id, time] for x in (sublist isa Vector ? sublist : [sublist])]
+    all_var_symbols = [x for sublist in [output, flexible_input, fixed_inputs, id, time] for x in (sublist isa Vector ? sublist : [sublist])]
 
     for var in all_var_symbols
         if string(var) ∉ names(data)
@@ -81,10 +81,10 @@ function opts_filler!(opts::Dict)
                                                       store_trace = false)
     end
     if "ses_print_starting_values" ∉ keys(opts) 
-        opts["ses_print_starting_values"] => false
+        opts["ses_print_starting_values"] = false
     end
     if "ses_print_results" ∉ keys(opts)
-        opts["ses_print_results"] => false
+        opts["ses_print_results"] = false
     end
     
     return opts

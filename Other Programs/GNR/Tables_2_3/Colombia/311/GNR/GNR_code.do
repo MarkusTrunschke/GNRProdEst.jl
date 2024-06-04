@@ -78,6 +78,8 @@ capture nl ( si = ln({g0=ncrap} + {gl=_b[l]}*l + {gk=_b[k]}*k + {gi=_b[i]}*i + {
    {gii=_b[ii]}*ii + {glki=_b[lki]}*lki) ) if si~=. & l~=. & k~=. & i~=., iter(100);
 #delimit cr
 
+pause on
+pause
 gen test = e(converge)
 if test ~= 1 exit
 

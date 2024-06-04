@@ -15,7 +15,6 @@ module GNRProdEst
     
     ## Set a number of parameters
     # Set BLAS and LAPACK function number of threads to 1 because it interferes with bootstrap loop parallelization. # Why? Well, what do I know? I just noticed that if I run a lot of stuff in parallel (EVEN THOUGH IT USES A LOT OF BLAS OPERATIONS!),
-    # it somehow gets in conflict with the BLAS scheduling. My prefered setup is now 63 Julia threads and 1 BLAS thread.
     BLAS.set_num_threads(1)
 
     ## Include other files defining functions
@@ -23,6 +22,7 @@ module GNRProdEst
     include("estimation_fnc.jl") # Function to estimate the production function
     include("aux_fnc.jl") # All auxiliary function definitions
 
-    export Nothing
+    # Export user functions
+    export gnrprodest, gnrprodest!, gnrfirststage, gnrfirststage!, gnrsecondstage, gnrseconstage!
 
 end
