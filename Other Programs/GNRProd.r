@@ -6,6 +6,8 @@ library(gnrprod)
 # load Colombian plant-level data
 data <- colombian
 
+# write.csv(data, "/Users/markus_trunschke/Documents/GNRProdEst/Other Programs/R-version/colombian.csv")
+data <- read.csv(file = "/Users/markus_trunschke/Documents/GNRProdEst/Other Programs/R-version/colombian.csv")
 # estimate production function parameters and productivity
 gnr_fit <- gnrprod(output = "RGO",
                    fixed = c("L", "K"),

@@ -1,5 +1,5 @@
 ## Function that converts inputs into correct types for my program
-function GNR_input_cleaner!(;fixed_inputs::Union{Array{Symbol},Symbol}, flexible_input::Union{Array{Symbol},Symbol}, all_inputs::Array{Symbol})
+function GNR_input_cleaner!(;fixed_inputs::Union{Array{Symbol},Symbol}, flexible_input::Union{Array{Symbol},Symbol}, all_inputs::Array{Symbol}, fes_starting_values::Union{Vector{<:Number},Vector{Missing}} = vec([missing]), ses_starting_values::Union{Vector{<:Number},Vector{Missing}} = vec([missing]))
     # Convert fixed input into vector of symbols if an array was given
     if typeof(fixed_inputs) == Array || typeof(fixed_inputs) == Matrix{Symbol}
         fixed_inputs = vec(fixed_inputs)
@@ -14,7 +14,21 @@ function GNR_input_cleaner!(;fixed_inputs::Union{Array{Symbol},Symbol}, flexible
         all_inputs = [x for sublist in [flexible_input, fixed_inputs] for x in (sublist isa Vector ? sublist : [sublist])]
     end
     
-    return fixed_inputs, flexible_input, all_inputs # Return cleaned inputs
+    # Convert Int to Float because optimisers don't like Int starting values
+    if typeof(fes_starting_values) != Vector{Missing} && size(fes_starting_values) != (1,)
+        if typeof(fes_starting_values) == Vector{Int64}
+            fes_starting_values = float.(fes_starting_values)
+        end
+    end
+
+    # Convert Int to Float because optimisers don't like Int starting values
+    if typeof(ses_starting_values) != Vector{Missing} && size(ses_starting_values) != (1,)
+        if typeof(ses_starting_values) == Vector{Int64}
+            ses_starting_values = float.(ses_starting_values)
+        end
+    end
+
+    return fixed_inputs, flexible_input, all_inputs, fes_starting_values, ses_starting_values # Return cleaned inputs
 end
 
 ## Function that checks if every input makes sense and thows an error if the user messed up
@@ -25,8 +39,8 @@ function error_throw_fnc(data::DataFrame,
                          ln_share_flex_y_var::Symbol, 
                          id::Symbol, 
                          time::Symbol, 
-                         fes_starting_values::Union{Vector{Union<:Number}, Vector{Missing}},
-                         ses_starting_values::Union{Vector{Union<:Number}, Vector{Missing}},
+                         fes_starting_values::Union{Vector{<:Number}, Vector{Missing}, Matrix{<:Number}},
+                         ses_starting_values::Union{Vector{<:Number}, Vector{Missing}, Matrix{<:Number}},
                          opts::Dict)
 
     # Check if variables are actually in DataFrame
@@ -46,10 +60,6 @@ end
 
 ## Auxiliary function to fill up options that were not given in opts dictionary
 function opts_filler!(opts::Dict)
-    
-    if "fes_series_degree" ∉ keys(opts)
-        opts["fes_series_degree"] = 2
-    end
     if "fes_print_starting_values" ∉ keys(opts)
         opts["fes_print_starting_values"] = false
     end
@@ -57,13 +67,25 @@ function opts_filler!(opts::Dict)
         opts["fes_print_results"] = false
     end
     if "fes_method" ∉ keys(opts)
-        opts["fes_method"] = "OLS"
+        opts["fes_method"] = "NLLS"
+    end
+    if "fes_optimizer" ∉ keys(opts)
+        opts["fes_optimizer"] = NelderMead()
+    end
+    if "fes_optimizer_options" ∉ keys(opts)
+        opts["fes_optimizer_options"] = Optim.Options(iterations = 100000,
+                                                      f_tol = 1e-9,
+                                                      x_tol = 1e-12,
+                                                      g_tol = 1e-13, # √(Σ(yᵢ-ȳ)²)/n ≤ 1.0e-13 (only sets g_abstol, not outer_g_abstol)
+                                                      allow_f_increases = true,
+                                                      show_trace = false,
+                                                      extended_trace = false,
+                                                      show_every = 1,
+                                                      time_limit = NaN,
+                                                      store_trace = false)
     end
     if "ses_print_starting_values" ∉ keys(opts)
         opts["ses_print_starting_values"] = false
-    end
-    if "ses_series_degree" ∉ keys(opts)
-        opts["ses_series_degree"] = 2
     end
     if "ses_optimizer" ∉ keys(opts)
         opts["ses_optimizer"] = NelderMead()
@@ -155,7 +177,7 @@ end
 ## Start values calculation function for the first stage (Currently only an OLS as in GNR 2020))
 function startvalues(;data::DataFrame, Y_var::Symbol, X_vars::Union{Symbol,Array{Symbol}}, user_start_vals::Vector{<:Union{Missing, Number}}, stage::String, print_res::Bool)
     
-    if any(ismissing.(user_start_vals)) || size(user_start_vals) != (1,) # If user did not specify starting values
+    if any(ismissing.(user_start_vals)) || size(user_start_vals) == (1,) # If user did not specify starting values
 
         # Define matrices for OLS
         Y = data[:, Y_var]
@@ -167,10 +189,10 @@ function startvalues(;data::DataFrame, Y_var::Symbol, X_vars::Union{Symbol,Array
         if stage == "first stage" # GNR make a correction to the constant in their first stage (this is probably because the constant is so strongly negative for their example that the ln(Xγ) returns NaNs because of negative Xγ-values)
             startvals[1] = 0.1 - minimum((X*startvals) .- startvals[1])
         end
-    else # If user specified starting values
-        
+    else # If user specified starting starting_values
+
         # Check dimensions and throw an error if they do not match
-        if size(X_vars) != size(user_start_vals)
+        if size(X_vars)[1] + 1 != size(user_start_vals)[1] # Add constant
             println(size(X_vars))
             println(size(user_start_vals))
             throw("You specified either too many or not enough "*stage*" starting values!")

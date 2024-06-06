@@ -1,0 +1,41 @@
+using Random, LsqFit, Distributions, Optim, BenchmarkTools, LinearAlgebra
+
+X = rand(Float64, 10000, 4)
+
+β = [1, 1, 1, 1]
+
+Y = log.(X*β) + rand(Normal(0.0, 0.05), 10000)
+
+function obj_fnc(β, Y, X, c)
+    
+    mul!(c.cache1,X,β)
+    c.cache1 .= (Y .- log.(c.cache1)) .^2
+
+    return sum!(c.obj, c.cache1)[1]
+end
+
+obj_fnc(Y, X)
+
+ϵ = Array{Float64}(undef, 10000,1)
+
+c = (cache1 = Array{Float64}(undef, 10000,1),
+     obj = [1.0]
+)
+
+@btime obj_fnc($β_start, $Y, $X, c)
+
+
+function model(X, β)
+    return log.(X*β)
+end
+
+# Solve for parameters
+β_start = [1.5, 1.5, 1.5, 1.5]
+fes_res = curve_fit(model, X, Y, β_start)
+display(fes_res.param)
+
+
+res = optimize(par -> obj_fnc(par, Y, X, c), β_start)
+res.minimizer
+
+

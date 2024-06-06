@@ -101,6 +101,8 @@ gnrflex <- function(output, fixed, flex, share, id, time, data, control) {
   constant <- -min(constant, na.rm = TRUE) + 0.1
 
   start <- c(constant, (coef(start_reg)[-1]))
+  print("Starting values")
+  print(start)
   share_reg <- gauss_newton_reg(start = start, data = poly_input,
                                 share = share, control = ctrl)
 
