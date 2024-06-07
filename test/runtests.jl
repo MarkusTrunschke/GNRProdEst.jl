@@ -50,14 +50,9 @@ end
 
 
 
-opts = Dict( "fes_method" => "OLS", # OLS is experimental. It gives (almost) the same results but the residual is slightly different. However, it does not seem to matter too much when you check the second stage results
+opts = Dict( "fes_method" => "NLLS", # OLS is experimental. It gives (almost) the same results but the residual is slightly different. However, it does not seem to matter too much when you check the second stage results
              "fes_print_starting_values" => true,
              "fes_print_results" => true,
-             "fes_optimizer_options" =>  Optim.Options(
-                                        f_tol = 1e-9,
-                                        x_tol = 1e-2,
-                                        g_tol = 1e-10,),
-             "ses_optimizer" => NelderMead(),
              "ses_optimizer_options" =>  Optim.Options(
                                         f_tol = 1e-9,
                                         x_tol = 1e-2,
@@ -87,9 +82,9 @@ gnr_res = GNRProdEst.gnrprodest!(data = data_R,
                                 ln_share_flex_y_var = :si, 
                                 id = :id, 
                                 time = :time,
-                                share_degree = 2,
-                                int_const_series_degree = 2, 
-                                lm_tfp_degree = 2,
+                                share_degree = 3,
+                                int_const_series_degree = 3, 
+                                lm_tfp_degree = 3,
                                 opts = opts);
 
 
@@ -110,13 +105,45 @@ opts = Dict("fes_series_degree" => 3,
             "fes_print_results" => true)
 
 
-gnr_res = GNRProdEst.gnrprodest!(data = colombianR_data, 
+opts = Dict( "fes_method" => "NLLS", # OLS is experimental. It gives (almost) the same results but the residual is slightly different. However, it does not seem to matter too much when you check the second stage results
+            "fes_print_starting_values" => true,
+            "fes_print_results" => true,
+            "fes_optimizer_options" =>  Optim.Options(
+                                       f_tol = 1e-9,
+                                       x_tol = 1e-8,
+                                       g_tol = 1e-10,),
+            "ses_optimizer" => IPNewton(),
+            "ses_optimizer_options" =>  Optim.Options(
+                                       f_tol = 1e-9,
+                                       x_tol = 1e-2,
+                                       g_tol = 1e-10,),
+            "ses_print_starting_values" => true,
+            "ses_print_results" => true)
+
+            colombianR_data.constant = ones(length(colombianR_data.RGO))
+
+
+            opts = Dict("fes_series_degree" => 3,
+            "fes_method" => "NLLS", # OLS is experimental. It gives (almost) the same results but the residual is slightly different. However, it does not seem to matter too much when you check the second stage results
+            "fes_print_starting_values" => true,
+            "fes_print_results" => true,
+            "ses_print_starting_values" => true,
+            "ses_print_results" => true)
+
+fes_res, est_df = GNRProdEst.gnrfirststage(est_df = colombianR_data, output = :RGO, flexible_input = :RI, fixed_inputs = [:L :K], ln_share_flex_y_var = :share, share_degree = 3, opts = opts);
+ses_res = GNRProdEst.gnrsecondstage(est_df = est_df, id = :id, time = :year, fixed_inputs = [:L :K], flexible_input = :RI, fes_returns = fes_res, int_const_series_degree = 3, lm_tfp_degree = 3, opts = opts);
+
+
+gnr_res = GNRProdEst.gnrprodest(data = colombianR_data, 
             output = :RGO, 
             flexible_input = :RI, 
             fixed_inputs = [:L :K], 
             ln_share_flex_y_var = :share, 
             id = :id, 
             time = :year,
+            share_degree = 3,
+            int_const_series_degree = 3, 
+            lm_tfp_degree = 3,
             opts = opts);
 
 
