@@ -3,7 +3,7 @@ function gnrprodest(;data::DataFrame,
                   output::Symbol, 
                   flexible_input::Symbol, 
                   fixed_inputs::Union{Symbol,Array{Symbol}}, 
-                  ln_share_flex_y_var::Symbol = :NotDefinedByUser, 
+                  ln_share_flex_y::Symbol = :NotDefinedByUser, 
                   id::Symbol, 
                   time::Symbol, 
                   fes_starting_values::Vector = [missing],
@@ -19,7 +19,7 @@ function gnrprodest(;data::DataFrame,
                                                  output = output, 
                                                  flexible_input = flexible_input, 
                                                  fixed_inputs = fixed_inputs, 
-                                                 ln_share_flex_y_var = ln_share_flex_y_var, 
+                                                 ln_share_flex_y = ln_share_flex_y, 
                                                  id = id, 
                                                  time = time, 
                                                  fes_starting_values = fes_starting_values,
@@ -37,7 +37,7 @@ function gnrprodest!(;data::DataFrame,
                   output::Symbol, 
                   flexible_input::Symbol, 
                   fixed_inputs::Union{Symbol,Array{Symbol}}, 
-                  ln_share_flex_y_var::Symbol = :NotDefinedByUser, 
+                  ln_share_flex_y::Symbol = :NotDefinedByUser, 
                   id::Symbol, 
                   time::Symbol,
                   fes_starting_values::Vector = [missing],
@@ -52,16 +52,16 @@ function gnrprodest!(;data::DataFrame,
     fixed_inputs, _ , fes_starting_values, ses_starting_values = GNR_input_cleaner!(fixed_inputs = fixed_inputs, flexible_input = flexible_input, fes_starting_values = fes_starting_values, ses_starting_values = ses_starting_values)
 
     # Throw error if user messed up
-    error_throw_fnc_first_stage(data, output, flexible_input, fixed_inputs, ln_share_flex_y_var, opts)
+    error_throw_fnc_first_stage(data, output, flexible_input, fixed_inputs, ln_share_flex_y, opts)
 
     # Get additional options right
     opts = opts_filler!(opts)
 
     ## Run data preparation to ensure inputs are working with internals
-    prep_data!(data, output = output, flexible_input = flexible_input, fixed_inputs = fixed_inputs, ln_share_flex_y_var = ln_share_flex_y_var, id = id, time = time)
+    prep_data!(data, output = output, flexible_input = flexible_input, fixed_inputs = fixed_inputs, ln_share_flex_y = ln_share_flex_y, id = id, time = time)
 
     ## Run first stage estimation
-    fes_returns = gnrfirststage!(est_df = data, output = output, flexible_input = flexible_input, fixed_inputs = fixed_inputs, ln_share_flex_y_var = ln_share_flex_y_var, share_degree = share_degree, starting_values = fes_starting_values, opts = opts)
+    fes_returns = gnrfirststage!(est_df = data, output = output, flexible_input = flexible_input, fixed_inputs = fixed_inputs, ln_share_flex_y = ln_share_flex_y, share_degree = share_degree, starting_values = fes_starting_values, opts = opts)
 
     ## Run second stage estimation
     ses_returns = gnrsecondstage!(est_df = data, id = id, time = time, fixed_inputs = fixed_inputs, flexible_input = flexible_input, starting_values = ses_starting_values, lm_tfp_degree = lm_tfp_degree, int_const_series_degree = int_const_series_degree, called_from_GNRProd = true, fes_returns = fes_returns, opts = opts)
@@ -71,7 +71,7 @@ function gnrprodest!(;data::DataFrame,
 end
 
 ## First stage function
-function gnrfirststage!(;est_df, output::Symbol, flexible_input::Union{Symbol,Array{Symbol}}, fixed_inputs::Union{Symbol,Array{Symbol}}, ln_share_flex_y_var::Symbol, share_degree::Int = 3, starting_values::Vector = [missing], opts::Dict=Dict())
+function gnrfirststage!(;est_df, output::Symbol, flexible_input::Union{Symbol,Array{Symbol}}, fixed_inputs::Union{Symbol,Array{Symbol}}, ln_share_flex_y::Symbol, share_degree::Int = 3, starting_values::Vector = [missing], opts::Dict=Dict())
     
     all_input_symbols::Vector{Symbol} = vec(hcat(fixed_inputs..., flexible_input))
 
@@ -79,7 +79,7 @@ function gnrfirststage!(;est_df, output::Symbol, flexible_input::Union{Symbol,Ar
     fixed_inputs, flexible_input, starting_values, _ = GNR_input_cleaner!(fixed_inputs = fixed_inputs, flexible_input = flexible_input, fes_starting_values = starting_values)
     
     # Throw error if user messed up
-    error_throw_fnc_first_stage(est_df, output, flexible_input, fixed_inputs, ln_share_flex_y_var, opts)
+    error_throw_fnc_first_stage(est_df, output, flexible_input, fixed_inputs, ln_share_flex_y, opts)
 
     # Get additional options right
     opts = opts_filler!(opts)
@@ -93,10 +93,10 @@ function gnrfirststage!(;est_df, output::Symbol, flexible_input::Union{Symbol,Ar
     polynom_input_symbols = polynom_series!(data = est_df, var_names = all_input_symbols, degree = share_degree)
 
     # Run first stage estimation
-    γ_dash, fes_opt_res = fes_est(data=est_df, ln_share_flex_y_var = ln_share_flex_y_var, input_var_symbols = polynom_input_symbols, method = opts["fes_method"], starting_values = starting_values, opts = opts)
+    γ_dash, fes_opt_res = fes_est(data=est_df, ln_share_flex_y = ln_share_flex_y, input_var_symbols = polynom_input_symbols, method = opts["fes_method"], starting_values = starting_values, opts = opts)
     
     # Calculate some quantities
-    fes_res, E = fes_predictions!(data = est_df, ln_share_flex_y_var = ln_share_flex_y_var, flexible_input = flexible_input, input_var_symbols = polynom_input_symbols, γ_dash = γ_dash, output = output)
+    fes_res, E = fes_predictions!(data = est_df, ln_share_flex_y = ln_share_flex_y, flexible_input = flexible_input, input_var_symbols = polynom_input_symbols, γ_dash = γ_dash, output = output)
     
     # Print results
     if opts["fes_print_results"] == true
@@ -121,7 +121,7 @@ function gnrfirststage!(;est_df, output::Symbol, flexible_input::Union{Symbol,Ar
 end
 
 ## First stage estimation function that does not modify inputs (wrapper that copies inputs before passing it on)
-function gnrfirststage(;est_df, output::Symbol, flexible_input::Union{Symbol,Array{Symbol}}, fixed_inputs::Union{Symbol,Array{Symbol}}, ln_share_flex_y_var::Symbol, share_degree::Int = 3, starting_values::Vector = [missing], opts::Dict=Dict())
+function gnrfirststage(;est_df, output::Symbol, flexible_input::Union{Symbol,Array{Symbol}}, fixed_inputs::Union{Symbol,Array{Symbol}}, ln_share_flex_y::Symbol, share_degree::Int = 3, starting_values::Vector = [missing], opts::Dict=Dict())
 
     # Copy data s.t. the program does not modify existing data
     est_df = copy(est_df)
@@ -131,7 +131,7 @@ function gnrfirststage(;est_df, output::Symbol, flexible_input::Union{Symbol,Arr
                                      output = output, 
                                      flexible_input = flexible_input,
                                      fixed_inputs = fixed_inputs, 
-                                     ln_share_flex_y_var = ln_share_flex_y_var,
+                                     ln_share_flex_y = ln_share_flex_y,
                                      share_degree = share_degree,
                                      starting_values = starting_values, 
                                      opts = opts)
@@ -141,11 +141,11 @@ function gnrfirststage(;est_df, output::Symbol, flexible_input::Union{Symbol,Arr
 end
 
 ## First stage estimation function
-function fes_est(; data::DataFrame, ln_share_flex_y_var::Symbol, input_var_symbols::Array{Symbol}, method::String, starting_values::Vector, opts::Dict)
+function fes_est(; data::DataFrame, ln_share_flex_y::Symbol, input_var_symbols::Array{Symbol}, method::String, starting_values::Vector, opts::Dict)
     
     if method == "OLS" # The GNR replication code uses a non-linear regression of the shares onto the natural logarithm of the polynomials for the first stage. However, this seems unnecessary. I cannot see any reason not to simply take the exponential of the shares onto the polynomials. This is a linear regression estimated by OLS. It is much faster to calculate and much more robust because it is not a numerical optimization but has a simple analytical solution.
         # Define matrices for OLS
-        Y = exp.(data[:,ln_share_flex_y_var])
+        Y = exp.(data[:,ln_share_flex_y])
         X = hcat(data.constant, Matrix(data[:,input_var_symbols]))
 
         # Calculate OLS
@@ -156,12 +156,12 @@ function fes_est(; data::DataFrame, ln_share_flex_y_var::Symbol, input_var_symbo
     elseif method == "NLLS"
 
         # Get starting values for NLLS (Follow replication code of GNR for now)
-        γ_start = startvalues(data = data, Y_var = ln_share_flex_y_var, X_vars = input_var_symbols, user_start_vals = starting_values, stage = "first stage", opts = opts)
+        γ_start = startvalues(data = data, Y_var = ln_share_flex_y, X_vars = input_var_symbols, user_start_vals = starting_values, stage = "first stage", opts = opts)
         
         # Get matrices
         X = Matrix(hcat(data.constant, Matrix(data[:,input_var_symbols])))
-        Y = data[:, ln_share_flex_y_var]
-        # Y = exp.(data[:, ln_share_flex_y_var])
+        Y = data[:, ln_share_flex_y]
+        # Y = exp.(data[:, ln_share_flex_y])
 
         if any((X*γ_start) .< 0)
             throw("Error: Innver formula of NLLS function is already negative at starting values. Provide starting values manually or check for errors in data.")
@@ -197,7 +197,7 @@ function NLLS_criterion!(γ, Y, X, c)
 end
 
 ## Function to calculate quantities in the first stage (after estimation)
-function fes_predictions!(;data::DataFrame, ln_share_flex_y_var::Symbol, flexible_input::Symbol, input_var_symbols::Array{Symbol}, γ_dash::Vector{<:Number}, output)
+function fes_predictions!(;data::DataFrame, ln_share_flex_y::Symbol, flexible_input::Symbol, input_var_symbols::Array{Symbol}, γ_dash::Vector{<:Number}, output)
     
     flex_elas_sym = Symbol(flexible_input, "_elas")
     
@@ -210,7 +210,7 @@ function fes_predictions!(;data::DataFrame, ln_share_flex_y_var::Symbol, flexibl
     data.D_E = X*γ_dash
 
     # Calculate first stage residual ϵ
-    data.ϵ = data.ln_D_E .- data[:,ln_share_flex_y_var]  # GNR and R-version of GNR calculate the residual like Xβ-Y instaed of  Y-Xβ. This is because of equation (11). There it is share = D_E - ϵ but we estimate D_E + ϵ. So take the negative of ϵ
+    data.ϵ = data.ln_D_E .- data[:,ln_share_flex_y]  # GNR and R-version of GNR calculate the residual like Xβ-Y instaed of  Y-Xβ. This is because of equation (11). There it is share = D_E - ϵ but we estimate D_E + ϵ. So take the negative of ϵ
     
     # Calculate constant E
     E = mean(exp.(data.ϵ))
