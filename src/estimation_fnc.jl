@@ -84,6 +84,11 @@ function gnrfirststage!(;est_df, output::Symbol, flexible_input::Union{Symbol,Ar
     # Get additional options right
     opts = opts_filler!(opts)
 
+    # Add constant to data if not yet in dataset
+    if "constant" ∉ names(est_df)
+        est_df.constant = ones(size(est_df)[1])
+    end
+
     # Get Polynomial series
     polynom_input_symbols = polynom_series!(data = est_df, var_names = all_input_symbols, degree = share_degree)
 
@@ -259,6 +264,11 @@ function gnrsecondstage!(;est_df::DataFrame, flexible_input::Symbol, fixed_input
         opts = opts_filler!(opts)
     end
 
+    # Add constant to data if not yet in dataset
+    if "constant" ∉ names(est_df)
+        est_df.constant = ones(size(est_df)[1])
+    end
+
     # Get starting values for GMM (Follow replication code of GNR for now)
     fixed_poly = Array{Symbol}[]
     if called_from_GNRProd == true # If called from within GNRProd, polynomials already exist. Use pure fixed input polynomials (as in GNR replication code)
@@ -284,7 +294,7 @@ function gnrsecondstage!(;est_df::DataFrame, flexible_input::Symbol, fixed_input
     ses_gmm_res, δ = ses_est(;data = est_df, starting_values = ses_starting_values, fixed_poly = fixed_poly, mathcal_Y_var = mathcal_Y_var, lm_tfp_degree = lm_tfp_degree, opts = opts)
 
     # Calculate some quantities
-    ses_quant_res = ses_predictions!(data = est_df, mathcal_Y_var = mathcal_Y_var, flexible_input = flexible_input, fixed_inputs = fixed_inputs, fixed_poly = fixed_poly, fes_returns = fes_returns, α = Optim.minimizer(ses_gmm_res))
+    ses_predictions!(data = est_df, mathcal_Y_var = mathcal_Y_var, flexible_input = flexible_input, fixed_inputs = fixed_inputs, fixed_poly = fixed_poly, fes_returns = fes_returns, α = Optim.minimizer(ses_gmm_res))
 
     # Print results
     if opts["ses_print_results"] == true
@@ -541,10 +551,6 @@ end
 ## Function printing results of the second stage
 function ses_print_res(; data::DataFrame, all_inputs::Array{Symbol}, fixed_poly, δ, α, lm_tfp_degree, opts::Dict)
     
-    # Print parameters of the GMM estimation
-
-
-    # Print summary stats of all output elasticities of inputs
     desc_table = Array{Union{Symbol,Float64}}(undef, length(all_inputs), 5)
 
     j = 1
@@ -581,12 +587,15 @@ function ses_print_res(; data::DataFrame, all_inputs::Array{Symbol}, fixed_poly,
     header_var = (["Variable", "Mean", "SD", "Min", "Max"])
     header_par = (["Variable", "Estimate"])
 
+    # Print parameters of the GMM estimation
     println("Integration constant series parameters")
     pretty_table(int_const_tab, header = header_par, formatters =  ft_printf("%5.5f"), limit_printing = false)
 
-    println("All input elasticities:")
+    # Print summary stats of all output elasticities of inputs
+    println("All output elasticities:")
     pretty_table(desc_table, header = header_var, formatters =  ft_printf("%5.5f"), limit_printing = false)
 
+    # Print productivity stats and law of motion parameters
     println("Productivity:")
     pretty_table(prod_table, header = header_var, formatters =  ft_printf("%5.5f"), limit_printing = false)
 

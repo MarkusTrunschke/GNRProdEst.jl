@@ -1,15 +1,20 @@
-#####################################################
-############### THE GNRProdEst PACKAGE ##############
-# Author: Markus Trunschke                          #
-# Date of first version: 18.04.2024                 #
-# Contact: markus.trunschke@googlemail.com          #
-#####################################################
-# Notes: This package implements the estimation of  #
-#        a production function using the method de- #
-#        scribed in Gandhi, Navarro, Rivers (2020). #
-#####################################################
+#######################################################
+################ THE GNRProdEst PACKAGE ###############
+# Author: Markus Trunschke                            #
+# Date of first version: 18.04.2024                   #
+# Contact: markus.trunschke@googlemail.com            #
+#######################################################
+# Notes: - This package implements the estimation of  #
+#          a production function using the method de- #
+#          scribed in Gandhi, Navarro, Rivers (2020). #
+#        - I relied on GNR (2020)'s replication code  #
+#          and the estimation package in R by         #
+#          David J. Jin in the development of this    #
+#          package                                    #
+#######################################################
 
 module GNRProdEst
+
     # Load dependencies
     using DataFrames, Revise, NonlinearSolve, PrettyTables, Statistics, ShiftedArrays, LinearAlgebra, Optim, BenchmarkTools, NaNMath
     
