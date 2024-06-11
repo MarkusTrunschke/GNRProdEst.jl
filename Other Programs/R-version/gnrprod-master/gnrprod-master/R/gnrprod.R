@@ -170,7 +170,8 @@ gnrprod <- function(output, fixed, flex, share, in_price = NULL,
                     "optim_info" = gnr_iv$optim_info,
                     "optim_control" = gnr_iv$control$optim_control,
                     "degree_constant" = gnr_iv$control$degree_tau,
-                    "degree_productivity" = gnr_iv$control$degree_w)
+                    "degree_productivity" = gnr_iv$control$degree_w,
+                    "elas" = elas)
 
   return_average_elas <- apply(elas, MARGIN = 2, FUN = mean)
   

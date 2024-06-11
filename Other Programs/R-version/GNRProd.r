@@ -71,7 +71,7 @@ GNR_MC_sample$errors <- gnr_FS$elas$residuals
 GNR_MC_sample$k2 <- GNR_MC_sample$k * runif(length(GNR_MC_sample$k))
 
 write.csv(GNR_MC_sample, "C:/Users/marku/Documents/GNRProdEst/Other Programs/GNR/Cleaned version of Table_1/cd_data_500_w_fs.csv")
-GNR_MC_data <- read.csv("C:/Users/marku/Documents/GNRProdEst/Other Programs/GNR/Cleaned version of Table_1/cd_data_500.csv")
+GNR_MC_data <- read.csv("/Users/markus_trunschke/Documents/GNRProdEst/Other Programs/GNR/Cleaned version of Table_1/cd_data_500.csv")
 
 gnr_FS <- gnrflex(output = "yg",
                    fixed = "k",
@@ -92,6 +92,16 @@ gnr_SES <- gnriv(object = gnr_FS, control = list(trace = 6,
 
 gnr_SES <- gnriv(object = gnr_FS, control = list(trace = 6, 
                                                  REPORT = 1)) # , control = list(method = "Nelder-Mead", trace = 6, # Don't display progress
+
+gnr_est <- gnrprod(data = GNR_MC_sample,
+                   output = "yg",
+                   fixed = "k",
+                   flex = "i",
+                   id = "id",
+                   time = "time",
+                   share = "si")
+summary(gnr_est) # Converges and gives decent results
+
 
 a =gnr_SES[[1]]
 a[1:5]
