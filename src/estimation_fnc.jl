@@ -49,10 +49,10 @@ function gnrprodest!(;data::DataFrame,
                   )
               
     # Clean inputs to be of the correct types
-    fixed_inputs, flexible_input, all_inputs, fes_starting_values = GNR_input_cleaner!(fixed_inputs = fixed_inputs, flexible_input = flexible_input, all_inputs = Array{Symbol}(undef,1,1), fes_starting_values = fes_starting_values, ses_starting_values = ses_starting_values)
+    fixed_inputs, _ , fes_starting_values, ses_starting_values = GNR_input_cleaner!(fixed_inputs = fixed_inputs, flexible_input = flexible_input, fes_starting_values = fes_starting_values, ses_starting_values = ses_starting_values)
 
     # Throw error if user messed up
-    error_throw_fnc(data, output, flexible_input, fixed_inputs, ln_share_flex_y_var, id, time, fes_starting_values, ses_starting_values, opts)
+    error_throw_fnc_first_stage(data, output, flexible_input, fixed_inputs, ln_share_flex_y_var, opts)
 
     # Get additional options right
     opts = opts_filler!(opts)
@@ -61,10 +61,10 @@ function gnrprodest!(;data::DataFrame,
     prep_data!(data, output = output, flexible_input = flexible_input, fixed_inputs = fixed_inputs, ln_share_flex_y_var = ln_share_flex_y_var, id = id, time = time)
 
     ## Run first stage estimation
-    fes_returns = gnrfirststage!(est_df = data, output = output, flexible_input = flexible_input, fixed_inputs = fixed_inputs, ln_share_flex_y_var = ln_share_flex_y_var, all_input_symbols = all_inputs, share_degree = share_degree, starting_values = fes_starting_values, opts = opts)
+    fes_returns = gnrfirststage!(est_df = data, output = output, flexible_input = flexible_input, fixed_inputs = fixed_inputs, ln_share_flex_y_var = ln_share_flex_y_var, share_degree = share_degree, starting_values = fes_starting_values, opts = opts)
 
     ## Run second stage estimation
-    ses_returns = gnrsecondstage!(est_df = data, id = id, time = time, fixed_inputs = fixed_inputs, flexible_input = flexible_input, all_inputs = all_inputs, starting_values = ses_starting_values, lm_tfp_degree = lm_tfp_degree, int_const_series_degree = int_const_series_degree, called_from_GNRProd = true, fes_returns = fes_returns, opts = opts)
+    ses_returns = gnrsecondstage!(est_df = data, id = id, time = time, fixed_inputs = fixed_inputs, flexible_input = flexible_input, starting_values = ses_starting_values, lm_tfp_degree = lm_tfp_degree, int_const_series_degree = int_const_series_degree, called_from_GNRProd = true, fes_returns = fes_returns, opts = opts)
 
     # Return return dictionarys from both stages
     return fes_returns, ses_returns
@@ -73,8 +73,12 @@ end
 ## First stage function
 function gnrfirststage!(;est_df, output::Symbol, flexible_input::Union{Symbol,Array{Symbol}}, fixed_inputs::Union{Symbol,Array{Symbol}}, ln_share_flex_y_var::Symbol, all_input_symbols::Vector{Symbol} = vec(hcat(fixed_inputs..., flexible_input)), share_degree::Int = 3, starting_values::Vector = [missing], opts::Dict=Dict())
     
-    GNR_input_cleaner!(fixed_inputs = fixed_inputs, flexible_input = flexible_input, all_inputs = all_input_symbols, fes_starting_values = starting_values)
+    # Clean inputs to make them comform with the rest of the program
+    fixed_inputs, flexible_input, starting_values, _ = GNR_input_cleaner!(fixed_inputs = fixed_inputs, flexible_input = flexible_input, fes_starting_values = starting_values)
     
+    # Throw error if user messed up
+    error_throw_fnc_first_stage(est_df, output, flexible_input, fixed_inputs, ln_share_flex_y_var, opts)
+
     # Get additional options right
     opts = opts_filler!(opts)
 
@@ -89,7 +93,7 @@ function gnrfirststage!(;est_df, output::Symbol, flexible_input::Union{Symbol,Ar
     
     # Print results
     if opts["fes_print_results"] == true
-        fes_print_res(fes_res)
+        fes_print_res(fes_res, opts)
     end
 
     # Put return objects in dictionary
@@ -120,7 +124,7 @@ function gnrfirststage(;est_df, output::Symbol, flexible_input::Union{Symbol,Arr
                                      output = output, 
                                      flexible_input = flexible_input,
                                      fixed_inputs = fixed_inputs, 
-                                     ln_share_flex_y_var = ln_share_flex_y_var, 
+                                     ln_share_flex_y_var = ln_share_flex_y_var,
                                      all_input_symbols = all_input_symbols,
                                      share_degree = share_degree,
                                      starting_values = starting_values, 
@@ -146,7 +150,7 @@ function fes_est(; data::DataFrame, ln_share_flex_y_var::Symbol, input_var_symbo
     elseif method == "NLLS"
 
         # Get starting values for NLLS (Follow replication code of GNR for now)
-        γ_start = startvalues(data = data, Y_var = ln_share_flex_y_var, X_vars = input_var_symbols, user_start_vals = starting_values, stage = "first stage", print_res = opts["fes_print_starting_values"])
+        γ_start = startvalues(data = data, Y_var = ln_share_flex_y_var, X_vars = input_var_symbols, user_start_vals = starting_values, stage = "first stage", opts = opts)
         
         # Get matrices
         X = Matrix(hcat(data.constant, Matrix(data[:,input_var_symbols])))
@@ -166,19 +170,6 @@ function fes_est(; data::DataFrame, ln_share_flex_y_var::Symbol, input_var_symbo
 
         fes_results = fes_res.minimizer # Return parameters
 
-        # Define model
-        # function model(X, γ)
-        #     return log.(X*γ)
-        # end
-
-        # function model(X, γ)
-        #     return X*γ
-        # end
-
-        # # Solve for parameters
-        # fes_res = curve_fit(model, X, Y, γ_start, show_trace = true)
-
-        # fes_results = fes_res.param # Return parameters
     end
 
     # Return solution vector
@@ -237,22 +228,25 @@ function fes_predictions!(;data::DataFrame, ln_share_flex_y_var::Symbol, flexibl
 end
 
 ## Function to print first stage results
-function fes_print_res(fes_res::DataFrame)
+function fes_print_res(fes_res::DataFrame, opts::Dict)
     # Print results if user wants that
     print_tab = hcat(fes_res.Variable, fes_res.γ, fes_res.γ_dash)
     header = (["Variable", "γ", "γ'"])
 
     println("First stage results:")
-    pretty_table(print_tab, header = header)
+    pretty_table(print_tab, header = header, formatters = ft_printf("%5.5f"), limit_printing = false)
 
     return nothing
 end
 
 ## Second stage estimation function
 function gnrsecondstage!(;est_df::DataFrame, flexible_input::Symbol, fixed_inputs::Union{Array{Symbol},Symbol}, all_inputs = Array{Symbol}(undef, size(hcat(fixed_inputs..., flexible_input))) , id::Symbol, time::Symbol, fes_returns::Dict, mathcal_Y_var::Symbol = :mathcal_Y, int_const_series_degree::Int = 3, lm_tfp_degree::Int = 3, called_from_GNRProd::Bool = false, starting_values::Vector = [missing], opts::Dict= Dict())
-
+    
     # Clean inputs to be of the correct types
-    fixed_inputs, flexible_input, all_inputs = GNR_input_cleaner!(fixed_inputs = fixed_inputs, flexible_input = flexible_input, all_inputs = all_inputs)
+    fixed_inputs, flexible_inputs, _ , starting_values  = GNR_input_cleaner!(fixed_inputs = fixed_inputs, flexible_input = flexible_input)
+
+    # Throw error if user messed up
+    error_throw_fnc_sec_stage(est_df, flexible_input, fixed_inputs, id, time, opts)
 
     # Get additional options right
     if called_from_GNRProd == false
@@ -275,24 +269,26 @@ function gnrsecondstage!(;est_df::DataFrame, flexible_input::Symbol, fixed_input
         fixed_poly = polynom_series!(data = est_df, var_names = fixed_inputs, degree = int_const_series_degree)
     end
     
-    ses_starting_values = startvalues(data = est_df, Y_var = :mathcal_Y, X_vars = fixed_poly, user_start_vals = starting_values, stage = "second stage", print_res =  opts["ses_print_starting_values"])[2:end]
+    ses_starting_values = startvalues(data = est_df, Y_var = :mathcal_Y, X_vars = fixed_poly, user_start_vals = starting_values, stage = "second stage", opts = opts)[2:end]
     
     # Calculate some lags
     panel_lag!(data = est_df, id = id, time = time, variable = [mathcal_Y_var, fixed_poly...], lag_prefix = "lag_", lags = 1, drop_missings = true, force = true)
 
     # Run estimation
-    ses_gmm_res = ses_est(;data = est_df, starting_values = ses_starting_values, fixed_poly = fixed_poly, mathcal_Y_var = mathcal_Y_var, lm_tfp_degree = lm_tfp_degree, opts = opts)
+    ses_gmm_res, δ = ses_est(;data = est_df, starting_values = ses_starting_values, fixed_poly = fixed_poly, mathcal_Y_var = mathcal_Y_var, lm_tfp_degree = lm_tfp_degree, opts = opts)
 
     # Calculate some quantities
     ses_quant_res = ses_predictions!(data = est_df, mathcal_Y_var = mathcal_Y_var, flexible_input = flexible_input, fixed_inputs = fixed_inputs, fixed_poly = fixed_poly, fes_returns = fes_returns, α = Optim.minimizer(ses_gmm_res))
 
     # Print results
     if opts["ses_print_results"] == true
-        ses_print_res(data = est_df, all_inputs = all_inputs)
+        ses_print_res(data = est_df, all_inputs = vec(hcat(fixed_inputs..., flexible_input)), fixed_poly = fixed_poly, δ = δ, α = Optim.minimizer(ses_gmm_res), lm_tfp_degree =lm_tfp_degree, opts = opts)
     end
 
     # Put return objects into dictionary
-    ses_returns = Dict("gmm_opt_results" => ses_gmm_res,
+    ses_returns = Dict("α" => Optim.minimizer(ses_gmm_res),
+                       "δ" => δ,
+                       "gmm_opt_results" => ses_gmm_res,
                        "gmm_opt_options" => opts["ses_optimizer_options"],
                        "polynom_fixed" => fixed_poly,
                        "fixed_inputs" => fixed_inputs,
@@ -333,6 +329,11 @@ end
 ## Second stage estimation function
 function ses_est(;data::DataFrame, fixed_poly::Vector{Symbol}, starting_values::Vector, mathcal_Y_var::Symbol, lm_tfp_degree::Int = 3, opts::Dict)
 
+
+    println("size(data)")
+    display(size(data))
+    println(names(data))
+
     ## Run GMM estimation
     # Preallocate inputs
     fixed_poly_mat = Array(data[!, fixed_poly])
@@ -365,8 +366,22 @@ function ses_est(;data::DataFrame, fixed_poly::Vector{Symbol}, starting_values::
                        opts["ses_optimizer"], 
                        opts["ses_optimizer_options"])
 
+    # Calculate law of motion for Productivity
+    # Calculate w and X
+    mul!(c.cache1, fixed_poly_mat, Optim.minimizer(gmm_res))
+    c.cache1 .= mathcal_Y_vec .- c.cache1 # c.cache1 is now w
+    mul!(c.cache2, fixed_poly_lag_mat, Optim.minimizer(gmm_res))
+
+    c.X[:,2] .= lag_mathcal_Y_vec .- c.cache2 # X = hcat(constant, w_lag_mat)   
+    polynomial_fnc_fast!(@view(c.X[:,2:end]), lm_tfp_degree, par_cal = false) # Fill X with polynomials of w
+
+    # OLS
+    mul!(c.cache3, c.X', c.X) # X'X
+    mul!(c.coefs, c.X', c.cache1) # X'*Y
+    ldiv!(cholesky!(Hermitian(c.cache3)), c.coefs) # inv(X'*X)*X*y, see https://discourse.julialang.org/t/memory-allocation-left-division-operator/103111/3 for an explination why this is the fastest way (even though not optimal for ill-conditioned matrices)
+    
     # Return GMM results
-    return gmm_res
+    return gmm_res, c.coefs
 end
 
 ## GMM criterion function
@@ -411,6 +426,7 @@ function ses_predictions!(;data::DataFrame, mathcal_Y_var::Symbol, flexible_inpu
     data.ω = data[!, mathcal_Y_var] .- Array(data[!, fixed_poly])*α
     data.Ω = exp.(data.ω)
     data.v = data.ω .* data.ϵ # ϵ = residulas from first stage
+
 
     ## Fixed input elasticity
     # First part: ∂C(fixed_inputs)/∂fixed_inputs
@@ -518,7 +534,7 @@ function ses_predictions!(;data::DataFrame, mathcal_Y_var::Symbol, flexible_inpu
 end
 
 ## Function printing results of the second stage
-function ses_print_res(; data::DataFrame, all_inputs::Array{Symbol})
+function ses_print_res(; data::DataFrame, all_inputs::Array{Symbol}, fixed_poly, δ, α, lm_tfp_degree, opts::Dict)
     
     # Print parameters of the GMM estimation
 
@@ -537,10 +553,40 @@ function ses_print_res(; data::DataFrame, all_inputs::Array{Symbol})
         j += 1
     end
 
-    header = (["Variable", "Mean", "SD", "Min", "Max"])
+    prod_table = [:ω mean(data.ω) std(data.ω) minimum(data.ω) maximum(data.ω)
+                  :Ω mean(data.Ω) std(data.Ω) minimum(data.Ω) maximum(data.Ω)
+                  :v mean(data.v) std(data.v) minimum(data.v) maximum(data.v)]
+
+    int_const_tab = [fixed_poly α]
+
+    lm_prod_table = Array{Union{String, Char, <:Number}}(undef, lm_tfp_degree + 1, 2) # Because of constant
+    for j = 1:lm_tfp_degree + 1
+        if j > 2
+            lm_prod_table[j,1] = "ω"*string(superscript_this!(string(j-1)))
+        elseif j == 2
+            lm_prod_table[j,1] = "ω"
+        elseif j == 1
+            lm_prod_table[j,1] = "constant"
+        end
+
+        lm_prod_table[j,2] = δ[j]
+    end
+
+
+    header_var = (["Variable", "Mean", "SD", "Min", "Max"])
+    header_par = (["Variable", "Estimate"])
+
+    println("Integration constant series parameters")
+    pretty_table(int_const_tab, header = header_par, formatters =  ft_printf("%5.5f"), limit_printing = false)
 
     println("All input elasticities:")
-    pretty_table(desc_table, header = header)
+    pretty_table(desc_table, header = header_var, formatters =  ft_printf("%5.5f"), limit_printing = false)
+
+    println("Productivity:")
+    pretty_table(prod_table, header = header_var, formatters =  ft_printf("%5.5f"), limit_printing = false)
+
+    println("Productivity Law of Motion:")
+    pretty_table(lm_prod_table, header = header_par, formatters =  ft_printf("%5.5f"), limit_printing = false)
 
     return nothing
 end

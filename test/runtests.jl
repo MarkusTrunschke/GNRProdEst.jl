@@ -98,6 +98,8 @@ gnr_res = GNRProdEst.gnrprodest!(data = data_R,
 
 # Test with R-version's Colombian test data (likely industry 311)
 colombianR_data = CSV.read("/Users/markus_trunschke/Documents/GNRProdEst/Other Programs/R-version/colombian.csv", DataFrame)
+colombianR_data.constant = ones(length(colombianR_data.RGO))
+
 
 opts = Dict("fes_series_degree" => 3,
             "fes_method" => "OLS", # OLS is experimental. It gives (almost) the same results but the residual is slightly different. However, it does not seem to matter too much when you check the second stage results
@@ -120,10 +122,11 @@ opts = Dict( "fes_method" => "NLLS", # OLS is experimental. It gives (almost) th
             "ses_print_starting_values" => true,
             "ses_print_results" => true)
 
-            colombianR_data.constant = ones(length(colombianR_data.RGO))
 
 
-            opts = Dict("fes_series_degree" => 3,
+opts = Dict("fes_series_degree" => 3,
+            "lm_tfp_degree" => 3,
+            "int_const_series_degree" => 3,
             "fes_method" => "NLLS", # OLS is experimental. It gives (almost) the same results but the residual is slightly different. However, it does not seem to matter too much when you check the second stage results
             "fes_print_starting_values" => true,
             "fes_print_results" => true,
@@ -134,6 +137,20 @@ fes_res, est_df = GNRProdEst.gnrfirststage(est_df = colombianR_data, output = :R
 ses_res = GNRProdEst.gnrsecondstage(est_df = est_df, id = :id, time = :year, fixed_inputs = [:L :K], flexible_input = :RI, fes_returns = fes_res, int_const_series_degree = 3, lm_tfp_degree = 3, opts = opts);
 
 
+fes_res = GNRProdEst.gnrfirststage!(est_df = colombianR_data, output = :RGO, flexible_input = :RI, fixed_inputs = [:L :K], ln_share_flex_y_var = :share, share_degree = 3, opts = opts);
+ses_res = GNRProdEst.gnrsecondstage!(called_from_GNRProd = true, est_df = colombianR_data, id = :id, time = :year, fixed_inputs = [:L :K], flexible_input = :RI, fes_returns = fes_res, int_const_series_degree = 3, lm_tfp_degree = 3, opts = opts);
+
+
+gnr_res = GNRProdEst.gnrprodest!(data = colombianR_data, 
+            output = :RGO, 
+            flexible_input = :RI, 
+            fixed_inputs = [:L :K], 
+            ln_share_flex_y_var = :share, 
+            id = :id, 
+            time = :year,
+            opts = opts);
+
+
 gnr_res = GNRProdEst.gnrprodest(data = colombianR_data, 
             output = :RGO, 
             flexible_input = :RI, 
@@ -141,9 +158,6 @@ gnr_res = GNRProdEst.gnrprodest(data = colombianR_data,
             ln_share_flex_y_var = :share, 
             id = :id, 
             time = :year,
-            share_degree = 3,
-            int_const_series_degree = 3, 
-            lm_tfp_degree = 3,
             opts = opts);
 
 
@@ -192,3 +206,47 @@ gnr_res = GNRProdEst.gnrprodest!(data = colombian_data,
 
 
 industry_311 = CSV.read("C:/Users/marku/Documents/GNRProdEst/Other Programs/GNR/Tables_2_3/Colombia/311/data_col_boot.csv", DataFrame)
+
+
+
+# Define a dictionary for superscript characters
+const superscript_map = Dict(
+    '0' => '⁰', '1' => '¹', '2' => '²', '3' => '³', '4' => '⁴',
+    '5' => '⁵', '6' => '⁶', '7' => '⁷', '8' => '⁸', '9' => '⁹',
+    'a' => 'ᵃ', 'b' => 'ᵇ', 'c' => 'ᶜ', 'd' => 'ᵈ', 'e' => 'ᵉ',
+    'f' => 'ᶠ', 'g' => 'ᵍ', 'h' => 'ʰ', 'i' => 'ⁱ', 'j' => 'ʲ',
+    'k' => 'ᵏ', 'l' => 'ˡ', 'm' => 'ᵐ', 'n' => 'ⁿ', 'o' => 'ᵒ',
+    'p' => 'ᵖ', 'r' => 'ʳ', 's' => 'ˢ', 't' => 'ᵗ', 'u' => 'ᵘ',
+    'v' => 'ᵛ', 'w' => 'ʷ', 'x' => 'ˣ', 'y' => 'ʸ', 'z' => 'ᶻ',
+    '+' => '⁺', '-' => '⁻', '=' => '⁼', '(' => '⁽', ')' => '⁾'
+)
+
+# Function to convert a character to its superscript equivalent
+function to_superscript(c::String)::String
+    return string(get(superscript_map, c[1], c[1]))
+end
+
+# Function to concatenate a character's superscript to another string
+function concat_with_superscript(base_str::String, char_to_superscript::String)::String
+    superscript_char = to_superscript(char_to_superscript)
+    return base_str * superscript_char
+end
+
+# Example usage
+base_string = "ω"
+char_to_convert = '5'
+result = concat_with_superscript(base_string, char_to_convert)
+println(result)  # Output: BaseString⁵
+
+for j = 1:3
+    lm_tfp_poly_names[j,1] = concat_with_superscript(base_string, string(j))
+end
+println(lm_tfp_poly_names[1,1])
+
+
+lm_tfp_poly_names = Array{Union{String, Char}}(undef, 3, 1)
+
+for j = 1:3
+    lm_tfp_poly_names[j,1] = concat_with_superscript("aaa", Char(j)) # "ω"*string(superscript_this!(Char(j)))
+end
+

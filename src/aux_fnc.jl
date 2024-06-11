@@ -1,5 +1,5 @@
 ## Function that converts inputs into correct types for my program
-function GNR_input_cleaner!(;fixed_inputs::Union{Array{Symbol},Symbol}, flexible_input::Union{Array{Symbol},Symbol}, all_inputs::Array{Symbol}, fes_starting_values::Union{Vector{<:Number},Vector{Missing}} = vec([missing]), ses_starting_values::Union{Vector{<:Number},Vector{Missing}} = vec([missing]))
+function GNR_input_cleaner!(;fixed_inputs::Union{Array{Symbol},Symbol}, flexible_input::Union{Array{Symbol},Symbol}, fes_starting_values::Union{Vector{<:Number},Vector{Missing}} = vec([missing]), ses_starting_values::Union{Vector{<:Number},Vector{Missing}} = vec([missing]))
     # Convert fixed input into vector of symbols if an array was given
     if typeof(fixed_inputs) == Array || typeof(fixed_inputs) == Matrix{Symbol}
         fixed_inputs = vec(fixed_inputs)
@@ -10,9 +10,10 @@ function GNR_input_cleaner!(;fixed_inputs::Union{Array{Symbol},Symbol}, flexible
         fixed_inputs = [fixed_inputs]
     end
 
-    if isdefined(all_inputs,1) == false # Only check first element but that should be enough to see if user provided the input
-        all_inputs = [x for sublist in [flexible_input, fixed_inputs] for x in (sublist isa Vector ? sublist : [sublist])]
-    end
+    # if isdefined(all_inputs,1) == false # Only check first element but that should be enough to see if user provided the input
+    #     # all_inputs = [x for sublist in [flexible_input, fixed_inputs] for x in (sublist isa Vector ? sublist : [sublist])]
+    #     all_inputs = vec(hcat(fixed_inputs..., flexible_input))
+    # end
     
     # Convert Int to Float because optimisers don't like Int starting values
     if typeof(fes_starting_values) != Vector{Missing} && size(fes_starting_values) != (1,)
@@ -28,7 +29,7 @@ function GNR_input_cleaner!(;fixed_inputs::Union{Array{Symbol},Symbol}, flexible
         end
     end
 
-    return fixed_inputs, flexible_input, all_inputs, fes_starting_values, ses_starting_values # Return cleaned inputs
+    return fixed_inputs, flexible_input, fes_starting_values, ses_starting_values # Return cleaned inputs
 end
 
 ## Function that checks if every input makes sense and thows an error if the user messed up
@@ -36,17 +37,15 @@ function error_throw_fnc(data::DataFrame,
                          output::Symbol, 
                          flexible_input::Symbol, 
                          fixed_inputs::Union{Symbol,Array{Symbol}}, 
-                         ln_share_flex_y_var::Symbol, 
+                         ln_share_flex_y_var::Symbol,
                          id::Symbol, 
-                         time::Symbol, 
-                         fes_starting_values::Union{Vector{<:Number}, Vector{Missing}, Matrix{<:Number}},
-                         ses_starting_values::Union{Vector{<:Number}, Vector{Missing}, Matrix{<:Number}},
+                         time::Symbol,
                          opts::Dict)
 
     # Check if variables are actually in DataFrame
     missing_str = string()
-    all_var_symbols = [x for sublist in [output, flexible_input, fixed_inputs, id, time] for x in (sublist isa Vector ? sublist : [sublist])]
-
+    all_var_symbols = vec(hcat(fixed_inputs..., flexible_input, id, time, output, ln_share_flex_y_var))
+    
     for var in all_var_symbols
         if string(var) ∉ names(data)
             missing_str = missing_str*string(var)
@@ -56,6 +55,50 @@ function error_throw_fnc(data::DataFrame,
         throw("The following columns are not in the specified dataframe: "*missing_str)
     end
     
+end
+
+function error_throw_fnc_first_stage(data::DataFrame, 
+    output::Symbol,
+    flexible_input::Symbol, 
+    fixed_inputs::Union{Symbol,Array{Symbol}}, 
+    ln_share_flex_y_var::Symbol,
+    opts::Dict)
+
+    # Check if variables are actually in DataFrame
+    missing_str = string()
+    all_var_symbols = vec(hcat(fixed_inputs..., flexible_input, output, ln_share_flex_y_var))
+
+    for var in all_var_symbols
+        if string(var) ∉ names(data)
+            missing_str = missing_str*string(var)
+        end
+    end
+    if missing_str != ""
+        throw("The following columns are not in the specified dataframe: "*missing_str)
+    end
+
+end
+
+function error_throw_fnc_sec_stage(data::DataFrame, 
+    flexible_input::Symbol, 
+    fixed_inputs::Union{Symbol,Array{Symbol}}, 
+    id::Symbol, 
+    time::Symbol,
+    opts::Dict)
+
+    # Check if variables are actually in DataFrame
+    missing_str = string()
+    all_var_symbols = vec(hcat(fixed_inputs..., flexible_input, id, time))
+
+    for var in all_var_symbols
+        if string(var) ∉ names(data)
+            missing_str = missing_str*string(var)
+        end
+    end
+    if missing_str != ""
+        throw("The following columns are not in the specified dataframe: "*missing_str)
+    end
+
 end
 
 ## Auxiliary function to fill up options that were not given in opts dictionary
@@ -175,8 +218,15 @@ function get_input_degree(input::Union{Symbol,Vector{Symbol}}, all_var_symbols::
 end
 
 ## Start values calculation function for the first stage (Currently only an OLS as in GNR 2020))
-function startvalues(;data::DataFrame, Y_var::Symbol, X_vars::Union{Symbol,Array{Symbol}}, user_start_vals::Vector{<:Union{Missing, Number}}, stage::String, print_res::Bool)
-    
+function startvalues(;data::DataFrame, Y_var::Symbol, X_vars::Union{Symbol,Array{Symbol}}, user_start_vals::Vector{<:Union{Missing, Number}}, stage::String, opts::Dict)
+    # Check if user-provided starting values are in the right form
+    if !(all(ismissing.(user_start_vals)) && length(user_start_vals) == 1)
+        # If user-provided not the right number of starting values
+        if length(user_start_vals) != length(X_vars)
+            throw(uppercasefirst(stage)*" starting values: You did not provide the correct number of starting values. They need to match the number of terms in the polynomial series. You can also leave them unspecified to let the program choose starting values.")
+        end
+    end
+
     if any(ismissing.(user_start_vals)) || size(user_start_vals) == (1,) # If user did not specify starting values
 
         # Define matrices for OLS
@@ -203,7 +253,8 @@ function startvalues(;data::DataFrame, Y_var::Symbol, X_vars::Union{Symbol,Array
     end
 
     # Print results if specified
-    if print_res == true
+    if (opts["fes_print_starting_values"] == true && stage == "first stage") | (opts["ses_print_starting_values"] == true && stage == "second stage")
+        
         print_tab = hcat(vcat([:constant], X_vars), startvals)
         header = (["Variable", "Value"])
 
@@ -213,7 +264,7 @@ function startvalues(;data::DataFrame, Y_var::Symbol, X_vars::Union{Symbol,Array
         end
 
         println(stage*" starting values:")
-        pretty_table(print_tab, header = header)
+        pretty_table(print_tab, header = header, formatters =  ft_printf("%5.5f"), limit_printing = false)
     end
 
     # Return result
@@ -418,4 +469,22 @@ function lagging_that_panel!(;data::DataFrame, id::Symbol, time::Symbol, variabl
 
     # Return result
     return data
+end
+
+## Function that returns the superscript of the corresponding input character (b/c Julia does not have a simple function for that)
+# Define a dictionary for superscript characters
+const superscript_map = Dict(
+    '0' => '⁰', '1' => '¹', '2' => '²', '3' => '³', '4' => '⁴',
+    '5' => '⁵', '6' => '⁶', '7' => '⁷', '8' => '⁸', '9' => '⁹',
+    'a' => 'ᵃ', 'b' => 'ᵇ', 'c' => 'ᶜ', 'd' => 'ᵈ', 'e' => 'ᵉ',
+    'f' => 'ᶠ', 'g' => 'ᵍ', 'h' => 'ʰ', 'i' => 'ⁱ', 'j' => 'ʲ',
+    'k' => 'ᵏ', 'l' => 'ˡ', 'm' => 'ᵐ', 'n' => 'ⁿ', 'o' => 'ᵒ',
+    'p' => 'ᵖ', 'r' => 'ʳ', 's' => 'ˢ', 't' => 'ᵗ', 'u' => 'ᵘ',
+    'v' => 'ᵛ', 'w' => 'ʷ', 'x' => 'ˣ', 'y' => 'ʸ', 'z' => 'ᶻ',
+    '+' => '⁺', '-' => '⁻', '=' => '⁼', '(' => '⁽', ')' => '⁾'
+)
+
+function superscript_this!(c::String) # Need to use a string as input because I don't understand Chars in Julia. Char(5) returns a different unicode than string(5). And the superscript of Char(5) does not  work
+    # Return the superscript character if it exists in the map, else return the original character
+    return get(superscript_map, c[1], c[1])
 end
