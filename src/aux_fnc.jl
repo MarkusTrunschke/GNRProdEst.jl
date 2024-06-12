@@ -9,11 +9,6 @@ function GNR_input_cleaner!(;fixed_inputs::Union{Array{Symbol},Symbol}, flexible
     if typeof(fixed_inputs) == Symbol
         fixed_inputs = [fixed_inputs]
     end
-
-    # if isdefined(all_inputs,1) == false # Only check first element but that should be enough to see if user provided the input
-    #     # all_inputs = [x for sublist in [flexible_input, fixed_inputs] for x in (sublist isa Vector ? sublist : [sublist])]
-    #     all_inputs = vec(hcat(fixed_inputs..., flexible_input))
-    # end
     
     # Convert Int to Float because optimisers don't like Int starting values
     if typeof(fes_starting_values) != Vector{Missing} && size(fes_starting_values) != (1,)
@@ -29,7 +24,7 @@ function GNR_input_cleaner!(;fixed_inputs::Union{Array{Symbol},Symbol}, flexible
         end
     end
 
-    return fixed_inputs, flexible_input, fes_starting_values, ses_starting_values # Return cleaned inputs
+    return fixed_inputs, flexible_input, fes_starting_values, ses_starting_values #, opts_any # Return cleaned inputs
 end
 
 ## Function that checks if every input makes sense and thows an error if the user messed up
@@ -102,21 +97,26 @@ function error_throw_fnc_sec_stage(data::DataFrame,
 end
 
 ## Auxiliary function to fill up options that were not given in opts dictionary
-function opts_filler!(opts::Dict)
-    if "fes_print_starting_values" ∉ keys(opts)
-        opts["fes_print_starting_values"] = false
+function opts_filler(opts::Dict)
+
+    # Define new opts dictionary because opts can have a too narrow type if the user did only specify a specific subset of options
+    new_opts::Dict{String, Any} = opts
+    
+    if "fes_print_starting_values" ∉ keys(new_opts)
+        # opts["fes_print_starting_values"] = false
+        new_opts["fes_print_starting_values"] = false
     end
-    if "fes_print_results" ∉ keys(opts)
-        opts["fes_print_results"] = false
+    if "fes_print_results" ∉ keys(new_opts)
+        new_opts["fes_print_results"] = false
     end
-    if "fes_method" ∉ keys(opts)
-        opts["fes_method"] = "NLLS"
+    if "fes_method" ∉ keys(new_opts)
+        new_opts["fes_method"] = "NLLS"
     end
-    if "fes_optimizer" ∉ keys(opts)
-        opts["fes_optimizer"] = NelderMead()
+    if "fes_optimizer" ∉ keys(new_opts)
+        new_opts["fes_optimizer"] = NelderMead()
     end
-    if "fes_optimizer_options" ∉ keys(opts)
-        opts["fes_optimizer_options"] = Optim.Options(iterations = 100000,
+    if "fes_optimizer_options" ∉ keys(new_opts)
+        new_opts["fes_optimizer_options"] = Optim.Options(iterations = 100000,
                                                       f_tol = 1e-9,
                                                       x_tol = 1e-12,
                                                       g_tol = 1e-13, # √(Σ(yᵢ-ȳ)²)/n ≤ 1.0e-13 (only sets g_abstol, not outer_g_abstol)
@@ -127,14 +127,14 @@ function opts_filler!(opts::Dict)
                                                       time_limit = NaN,
                                                       store_trace = false)
     end
-    if "ses_print_starting_values" ∉ keys(opts)
-        opts["ses_print_starting_values"] = false
+    if "ses_print_starting_values" ∉ keys(new_opts)
+        new_opts["ses_print_starting_values"] = false
     end
-    if "ses_optimizer" ∉ keys(opts)
-        opts["ses_optimizer"] = NelderMead()
+    if "ses_optimizer" ∉ keys(new_opts)
+        new_opts["ses_optimizer"] = NelderMead()
     end
-    if "ses_optimizer_options" ∉ keys(opts)
-        opts["ses_optimizer_options"] = Optim.Options(iterations = 100000,
+    if "ses_optimizer_options" ∉ keys(new_opts)
+        new_opts["ses_optimizer_options"] = Optim.Options(iterations = 100000,
                                                       f_tol = 1e-9,
                                                       x_tol = 1e-12,
                                                       g_tol = 1e-13, # √(Σ(yᵢ-ȳ)²)/n ≤ 1.0e-13 (only sets g_abstol, not outer_g_abstol)
@@ -145,14 +145,14 @@ function opts_filler!(opts::Dict)
                                                       time_limit = NaN,
                                                       store_trace = false)
     end
-    if "ses_print_starting_values" ∉ keys(opts) 
-        opts["ses_print_starting_values"] = false
+    if "ses_print_starting_values" ∉ keys(new_opts) 
+        new_opts["ses_print_starting_values"] = false
     end
-    if "ses_print_results" ∉ keys(opts)
-        opts["ses_print_results"] = false
+    if "ses_print_results" ∉ keys(new_opts)
+        new_opts["ses_print_results"] = false
     end
     
-    return opts
+    return new_opts
 end
 
 ## Function that checks a string to only contain defined substrings
