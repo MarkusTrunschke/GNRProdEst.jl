@@ -1,7 +1,8 @@
-@testset "GNRProdEst.jl" begin
+# Load required dependencies (use 'using Pkg' and Pkg.add("DataFrames"), Pkg.add("GNRProdEst") or Pkg.add("CSV") if you do not have any of these packages in your environment.)
+using GNRProdEst, DataFrames, CSV, Test, Optim
 
-    # Load required dependencies (use 'using Pkg' and Pkg.add("DataFrames"), Pkg.add("GNRProdEst") or Pkg.add("CSV") if you do not have any of these packages in your environment.)
-    using GNRProdEst, DataFrames, CSV, Test, Optim
+
+@testset "GNRProdEst.jl" begin
 
     # Read in replication data
     rep_data = CSV.read("test/GNR_data_500.csv", DataFrame)
@@ -55,7 +56,7 @@
 
     @test gnr_fes_res["E"] == 1.0360429884274056
 
-    @test Set(gnr_fes_res["polynom_series"]) == Set([:k, :k_k; :k_k_k; :k_k_i; :k_i; :k_i_i; :i; :i_i; :i_i_i])
+    @test Set(gnr_fes_res["polynom_series"]) == Set([:k; :k_k; :k_k_k; :k_k_i; :k_i; :k_i_i; :i; :i_i; :i_i_i])
 
     @test Set(gnr_fes_res["all_inputs"]) == Set([:k; :i])
 
