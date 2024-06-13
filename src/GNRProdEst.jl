@@ -16,7 +16,7 @@
 module GNRProdEst
 
     # Load dependencies
-    using DataFrames, PrettyTables, ShiftedArrays, LinearAlgebra, Optim, NaNMath
+    using DataFrames, PrettyTables, ShiftedArrays, LinearAlgebra, Optim, NaNMath, Statistics
     
     ## Set a number of parameters
     # Set BLAS and LAPACK function number of threads to 1 because it interferes with bootstrap loop parallelization. # Why? Well, what do I know? I just noticed that if I run a lot of stuff in parallel (EVEN THOUGH IT USES A LOT OF BLAS OPERATIONS!),

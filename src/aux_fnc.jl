@@ -274,62 +274,47 @@ end
 ## Polynomial series generating function
 function polynom_series!(;data::DataFrame, var_names::Union{Vector{Symbol},Symbol}, degree::Int)
 
-    if degree > 4
-        throw(error("Polynomial series degree is too large. The program only supports polynomial series until degree 4"))
+    if degree < 1
+        throw(error("Polynomial series degree must be at least 1"))
     end
 
     if typeof(var_names) == Symbol
         var_names = [var_names]
     end
 
-    nvar = length(var_names)
+    poly_var_names = Set(Symbol[])
 
-    poly_var_names::Array{Symbol} = []
+    function generate_polynomials(data, var_names, degree, prefix, idx)
+        if degree == 0
+            return
+        end
 
-    # Generate all variables
-    for j = 1 : nvar
-        push!(poly_var_names, var_names[j]) # Add variable name to polynomial variable symbol list
-
-        # If degree of polynomial series is larger than 1
-        if degree > 1
-            for i = j : nvar
-                varn = Symbol(String(var_names[j])*"_"*String(var_names[i])) # Generate variable name of new variable
-                push!(poly_var_names, varn) # Add variable name to polynomial variable symbol list
-                if varn ∈ names(data) # Check if variable is already in dataset. If yes: Drop it
-                    data = select(data, Not(varn))
-                end
-                data[:, varn] = data[:, var_names[j]] .* data[:,var_names[i]] # Add variable to dataset
-
-                # If degree of polynomial series is larger than 2
-                if degree > 2
-                    for u = i : nvar
-                        varn = Symbol(String(var_names[j])*"_"*String(var_names[i])*"_"*String(var_names[u])) # generate variable name of new variable
-                        push!(poly_var_names, varn) # Add variable name to polynomial variable symbol list
-                        if varn ∈ names(data) # Check if variable is already in dataset. If yes: Drop it
-                            data = select(data, Not(varn))
-                        end
-                        data[:,varn] = data[:,var_names[j]].*data[:,var_names[i]].*data[:,var_names[u]]
-
-                        # If degree of polynomial series is larger than 3
-                        if degree > 3
-                            for r = u : nvar
-                                varn = Symbol(String(var_names[j])*"_"*String(var_names[i])*"_"*String(var_names[u])*"_"*String(var_names[r])) # generate variable name of new variable
-                                push!(poly_var_names, varn) # Add variable name to polynomial variable symbol list
-                                if varn ∈ names(data) # Check if variable is already in dataset. If yes: Drop it
-                                    data = select(data, Not(varn))
-                                end
-                                data[:,varn] = data[:,var_names[j]].*data[:,var_names[i]].*data[:,var_names[u]].*data[:,var_names[r]]
-
-                            end
-                        end
-                    end
-                end
+        for i in idx:length(var_names)
+            new_prefix = prefix == "" ? string(var_names[i]) : string(prefix, "_", var_names[i])
+            varn = Symbol(new_prefix)
+            push!(poly_var_names, varn)
+            if varn ∈ names(data)
+                data = select(data, Not(varn))
             end
+
+            if prefix == ""
+                data[:, varn] = data[:, var_names[i]]
+            else
+                prev_var = Symbol(prefix)
+                data[:, varn] = data[:, prev_var] .* data[:, var_names[i]]
+            end
+
+            generate_polynomials(data, var_names, degree - 1, new_prefix, i)
         end
     end
 
-    # Return result
-    return poly_var_names
+    for var in var_names
+        push!(poly_var_names, var)
+    end
+
+    generate_polynomials(data, var_names, degree, "", 1)
+
+    return collect(poly_var_names)
 end
 
 ## Polynomial generation function
