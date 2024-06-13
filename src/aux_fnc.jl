@@ -274,21 +274,28 @@ end
 ## Polynomial series generating function
 function polynom_series!(;data::DataFrame, var_names::Union{Vector{Symbol},Symbol}, degree::Int)
 
+    # Check if user put in an invalid degree
     if degree < 1
         throw(error("Polynomial series degree must be at least 1"))
     end
 
+    # Convert to a vector if only one symbol put in to make my life easier
     if typeof(var_names) == Symbol
         var_names = [var_names]
     end
 
+    # Preallocate ooutput
     poly_var_names = Set(Symbol[])
 
+    # Recursively define polynomail calc fnc
     function generate_polynomials(data, var_names, degree, prefix, idx)
+
+        # Stop if degree is 0
         if degree == 0
             return
         end
 
+        # Calculate poynomials
         for i in idx:length(var_names)
             new_prefix = prefix == "" ? string(var_names[i]) : string(prefix, "_", var_names[i])
             varn = Symbol(new_prefix)
@@ -308,12 +315,14 @@ function polynom_series!(;data::DataFrame, var_names::Union{Vector{Symbol},Symbo
         end
     end
 
+    # Get vector of o
     for var in var_names
         push!(poly_var_names, var)
     end
 
+    # Run the just-defined fnc
     generate_polynomials(data, var_names, degree, "", 1)
-
+    
     return collect(poly_var_names)
 end
 
