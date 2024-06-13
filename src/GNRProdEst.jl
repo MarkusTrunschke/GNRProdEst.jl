@@ -10,7 +10,8 @@
 #        - I relied on GNR (2020)'s replication code  #
 #          and the estimation package in R by         #
 #          David J. Jin in the development of this    #
-#          package                                    #
+#          package. ChatGPT provided few but sometimes#
+#          valuable insights.                         #
 #######################################################
 
 module GNRProdEst
