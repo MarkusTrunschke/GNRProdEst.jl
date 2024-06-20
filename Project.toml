@@ -1,7 +1,7 @@
 name = "GNRProdEst"
 uuid = "c5ad59e2-017c-4e02-9cbc-8c6117b2c1fd"
 authors = ["Markus Trunschke"]
-version = "1.0.2"
+version = "1.0.3"
 
 [deps]
 Compat = "34da2185-b29b-5c13-b0c7-acf172513d20"

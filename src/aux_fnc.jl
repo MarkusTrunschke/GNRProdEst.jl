@@ -163,7 +163,7 @@ end
 
 ## Function that checks a string to only contain defined substrings
 function check_str_only_def_substr(s::String, strings_to_check::Union{Vector,String,Char})
-    parts = split(s, "_")
+    parts = split(s, '⋅')
 
     check_vec = falses(length(parts))
     i = 1
@@ -181,12 +181,12 @@ function check_str_only_def_substr(s::String, strings_to_check::Union{Vector,Str
     return all(check_vec)
 end
 
-## Function that iterates over an array of strings and checks if it only contains defined substrings (or "_")
+## Function that iterates over an array of strings and checks if it only contains defined substrings (or "⋅")
 function check_array_string_only_substrings(;s_vec::Vector{String}, strings_to_check::Union{Vector,String,Char})
     check_res = falses(length(s_vec))
     j = 1
     for stri in s_vec
-        res = check_str_only_def_substr(stri, [strings_to_check..., '_'])
+        res = check_str_only_def_substr(stri, [strings_to_check..., '⋅'])
         check_res[j] = res
         j += 1
     end
@@ -211,7 +211,7 @@ function get_input_degree(input::Union{Symbol,Vector{Symbol}}, all_var_symbols::
     for inp in input # Loop over all inputs
         j = 1
         for sym in all_var_symbols # Iterate over all symbols of the polynomials
-            parts = split(string(sym), "_")
+            parts = split(string(sym), '⋅')
             count_input = count(isequal(string(inp)), parts) # Check for each part if it matches the flexible input symbol and count the occurances
             input_degree_mat[i,j] = count_input
 
@@ -303,7 +303,7 @@ function polynom_series!(;data::DataFrame, var_names::Union{Vector{Symbol},Symbo
 
         # Calculate poynomials
         for i in idx:length(var_names)
-            new_prefix = prefix == "" ? string(var_names[i]) : string(prefix, "_", var_names[i])
+            new_prefix = prefix == "" ? string(var_names[i]) : string(prefix, '⋅', var_names[i])
             varn = Symbol(new_prefix)
             push!(poly_var_names, varn)
             if varn ∈ names(data)
@@ -330,34 +330,6 @@ function polynom_series!(;data::DataFrame, var_names::Union{Vector{Symbol},Symbo
     generate_polynomials(data, var_names, degree, "", 1)
     
     return collect(poly_var_names)
-end
-
-## Polynomial generation function
-function polynomial_fnc!(data::DataFrame, variable::Symbol, degree::Int; name::Symbol = variable, force::Bool = false)
-    
-    # Start polynomial names list
-    polynomials::Vector = [variable]
-
-    # Calculate polynomials
-    for i in 2:degree
-        
-        # Define polynomial column name
-        new_sym = Symbol(name, "_", i)
-
-        # Check if conflicting columns exist
-        if force == false && string(new_sym) ∈ names(data)
-            throw("Column name "*string(new_sym)*" already exists in dataframe. Either specify a different column symbol using the name option, rename conflicting columns in the dataframe, or use force option.")
-        end
-
-        # Calculate polynomial and put it in dataframe
-        data[!, new_sym] = data[!, variable] .^ i
-
-        # Add variable name to list
-        push!(polynomials, new_sym)
-    end
-
-    return polynomials, data
-    
 end
 
 ## If there are already prepared columns in the dataframe and their values just need to be updated, jump in here. This is the fast version with no dynamic allocations at runtime.
