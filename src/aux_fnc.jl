@@ -39,15 +39,32 @@ function error_throw_fnc(data::DataFrame,
 
     # Check if variables are actually in DataFrame
     missing_str = string()
-    all_var_symbols = vec(hcat(fixed_inputs..., flexible_input, id, time, output, ln_share_flex_y_var))
-    
+    non_num_str = string()
+
+    all_var_symbols = Array{Symbol}(undef,0)
+    if ln_share_flex_y_var != :NotDefinedByUser
+        all_var_symbols = vec(hcat(fixed_inputs..., flexible_input, id, time, output, ln_share_flex_y_var))
+    else
+        all_var_symbols = vec(hcat(fixed_inputs..., flexible_input, id, time, output))
+    end
+
     for var in all_var_symbols
         if string(var) ∉ names(data)
-            missing_str = missing_str*string(var)
+            missing_str = missing_str*string(var)*", "
         end
     end
     if missing_str != ""
-        throw("The following columns are not in the specified dataframe: "*missing_str)
+        throw("The following columns are not in the specified dataframe: "*missing_str[1:end-2])
+    end
+
+    # Check if input, output, and ln_share_flex_y are numeric
+    for var in setdiff(all_var_symbols, vec(hcat(id, time)))
+        if !(eltype(data[!, var]) <:Union{Missing, Number})
+            non_num_str = non_num_str*string(var)*", "
+        end
+    end
+    if non_num_str != ""
+        throw("The following columns should be numeric but are not: "*non_num_str[1:end-2])
     end
     
 end
@@ -61,6 +78,7 @@ function error_throw_fnc_first_stage(data::DataFrame,
 
     # Check if variables are actually in DataFrame
     missing_str = string()
+    non_num_str = string()
     
     all_var_symbols = Array{Symbol}(undef,0)
     if ln_share_flex_y_var != :NotDefinedByUser
@@ -71,11 +89,21 @@ function error_throw_fnc_first_stage(data::DataFrame,
 
     for var in all_var_symbols
         if string(var) ∉ names(data)
-            missing_str = missing_str*string(var)
+            missing_str = missing_str*string(var)*", "
         end
     end
     if missing_str != ""
-        throw("The following columns are not in the specified dataframe: "*missing_str)
+        throw("The following columns are not in the specified dataframe: "*missing_str[1:end-2])
+    end
+
+    # Check if input, output, and ln_share_flex_y are numeric
+    for var in all_var_symbols
+        if !(eltype(data[!, var]) <:Union{Missing, Number})
+            non_num_str = non_num_str*string(var)*", "
+        end
+    end
+    if non_num_str != ""
+        throw("The following columns should be numeric but are not: "*non_num_str[1:end-2])
     end
 
 end
@@ -89,15 +117,27 @@ function error_throw_fnc_sec_stage(data::DataFrame,
 
     # Check if variables are actually in DataFrame
     missing_str = string()
+    non_num_str = string()
+
     all_var_symbols = vec(hcat(fixed_inputs..., flexible_input, id, time))
 
     for var in all_var_symbols
         if string(var) ∉ names(data)
-            missing_str = missing_str*string(var)
+            missing_str = missing_str*string(var)*", "
         end
     end
     if missing_str != ""
-        throw("The following columns are not in the specified dataframe: "*missing_str)
+        throw("The following columns are not in the specified dataframe: "*missing_str[1:end-2])
+    end
+
+    # Check if inputs and output are numeric
+    for var in setdiff(all_var_symbols, vec(hcat(id, time)))
+        if !(eltype(data[!, var]) <:Union{Missing, Number})
+            non_num_str = non_num_str*string(var)*", "
+        end
+    end
+    if non_num_str != ""
+        throw("The following columns should be numeric but are not: "*non_num_str[1:end-2])
     end
 
 end

@@ -52,7 +52,7 @@ function gnrprodest!(;data::DataFrame,
     fixed_inputs, _ , fes_starting_values, ses_starting_values = GNR_input_cleaner!(fixed_inputs = fixed_inputs, flexible_input = flexible_input, fes_starting_values = fes_starting_values, ses_starting_values = ses_starting_values)
 
     # Throw error if user messed up
-    error_throw_fnc_first_stage(data, output, flexible_input, fixed_inputs, ln_share_flex_y, opts)
+    error_throw_fnc(data, output, flexible_input, fixed_inputs, ln_share_flex_y, id, time, opts)
 
     # Get additional options right
     opts = opts_filler(opts)
