@@ -29,14 +29,14 @@ All arguments in any of the functions are keyword arguments. The necessary argum
 - `data` is a DataFrame that includes all columns defined by other arguments.
 - `output` is the Symbol and represents the firms natural logarithm of gross output.
 - `flexible_input` is a Symbol representing the natural logarithm of the flexible input of the production function.
-- `fixed_input` is a Symbol or a vector of Symbols representing any natural logarithm of fixed production inputs.
+- `fixed_inputs` is a Symbol or a vector of Symbols representing any natural logarithm of fixed production inputs.
 - `id` is a Symbol of each firm's unique identifier.
 - `time` is a Symbol identifying the observation`s time period.
 
 #### Optional Arguments
 - `ln_share_flex_y` is a Symbol for the natural logarithm of the flexible input share of revenue. If it is not defined by the user, the package calculates it internally.
 - `share_degree` is the degree of the polynomial series in the share regression. Its default value is `3` if it is not defined by the user.
-- `m_tfp_degree` is the degree of the law of motion for $\omega$ (tfp) over time. The default value if not defined by user is `3`.
+- `lm_tfp_degree` is the degree of the law of motion for $\omega$ (tfp) over time. The default value if not defined by user is `3`.
 - `int_const_series_degree` is the degree of the polynomial series of the constant of integration in the second stage. Its default value is `3` if not defined by the user.
 - `fes_starting_values` is a vector of starting values for the first stage non-linear least squares regression. If the user does not define them, the package chooses them using a linear regression.
 - `ses_starting_values` is a vector of starting values for the second stage GMM estimation routine. If the user does not define them, the package chooses them using a linear regression.
