@@ -4,7 +4,13 @@ function prep_data!(data::DataFrame; output::Symbol, flexible_input::Symbol, fix
     # Flatten all arguments. Some might be arrays of symbols and others might just be symbols. The following iterates over all sublists and flattens them
     # all_var_symbols = [x for sublist in [output, flexible_input, fixed_inputs, ln_share_flex_y_var, id, time] for x in (sublist isa Vector ? sublist : [sublist])]
     # all_input_symbols = [x for sublist in [flexible_input, fixed_inputs] for x in (sublist isa Vector ? sublist : [sublist])]
-    all_var_symbols = vec(hcat(output, flexible_input, fixed_inputs... , ln_share_flex_y, id, time))
+    all_var_symbols = Array{Symbol}(undef,0)
+    if ln_share_flex_y != :NotDefinedByUser
+        all_var_symbols = vec(hcat(output, flexible_input, fixed_inputs... , ln_share_flex_y, id, time))
+    else
+        all_var_symbols = vec(hcat(output, flexible_input, fixed_inputs... , id, time))
+    end
+
     all_input_symbols = vec(hcat(flexible_input, fixed_inputs...))
     # Select the data
     select!(data, all_var_symbols)

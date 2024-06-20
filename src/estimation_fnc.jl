@@ -58,7 +58,7 @@ function gnrprodest!(;data::DataFrame,
     opts = opts_filler(opts)
 
     ## Run data preparation to ensure inputs are working with internals
-    prep_data!(data, output = output, flexible_input = flexible_input, fixed_inputs = fixed_inputs, ln_share_flex_y = ln_share_flex_y, id = id, time = time)
+    _, _, ln_share_flex_y = prep_data!(data, output = output, flexible_input = flexible_input, fixed_inputs = fixed_inputs, ln_share_flex_y = ln_share_flex_y, id = id, time = time)
 
     ## Run first stage estimation
     fes_returns = gnrfirststage!(data = data, output = output, flexible_input = flexible_input, fixed_inputs = fixed_inputs, ln_share_flex_y = ln_share_flex_y, share_degree = share_degree, starting_values = fes_starting_values, opts = opts)

@@ -61,7 +61,13 @@ function error_throw_fnc_first_stage(data::DataFrame,
 
     # Check if variables are actually in DataFrame
     missing_str = string()
-    all_var_symbols = vec(hcat(fixed_inputs..., flexible_input, output, ln_share_flex_y_var))
+    
+    all_var_symbols = Array{Symbol}(undef,0)
+    if ln_share_flex_y_var != :NotDefinedByUser
+        all_var_symbols = vec(hcat(fixed_inputs..., flexible_input, output, ln_share_flex_y_var))
+    else
+        all_var_symbols = vec(hcat(fixed_inputs..., flexible_input, output))
+    end
 
     for var in all_var_symbols
         if string(var) ∉ names(data)
