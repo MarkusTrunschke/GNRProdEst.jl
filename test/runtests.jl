@@ -8,7 +8,14 @@ using GNRProdEst, DataFrames, CSV, Test, Optim
     rep_data = CSV.read("test/GNR_data_500.csv", DataFrame)
 
     # Define some options to print results
-    opts = Dict("fes_print_results" => true, "ses_print_results" => true)
+    opts = Dict("fes_print_results" => true,
+    
+                "ses_print_starting_values" => true,
+                "ses_print_results" => true,
+                "ses_optimizer_options" => Optim.Options(f_tol = 1e-12,
+                                                         x_tol = 1e-12,
+                                                         g_tol = 1e-12)
+                )
 
     # Run both estimation stages at the same time
     gnr_fes_res, gnr_ses_res = GNRProdEst.gnrprodest(data = rep_data, 
@@ -18,8 +25,7 @@ using GNRProdEst, DataFrames, CSV, Test, Optim
                                     ln_share_flex_y = :si, 
                                     id = :id, 
                                     time = :time,
-                                    opts = Dict("fes_print_results" => false,
-                                                "ses_print_results" => true));
+                                    opts = opts);
 
     @test gnr_fes_res["γ"] ≈  [0.6523861637358107
                               -0.0011171888341931346
@@ -74,9 +80,9 @@ using GNRProdEst, DataFrames, CSV, Test, Optim
 
     @test Optim.converged(gnr_fes_res["fes_optim_results"])
 
-    @test gnr_ses_res["α"] == [0.2509312706883569, 0.01016696474922608, -0.00018874310946534437]
+    @test gnr_ses_res["α"] == [0.3871439515587196, -0.02456417904454124, 0.0024446787683550806]
 
-    @test gnr_ses_res["δ"] == [0.20471571812503617; 0.7359229322818818; 0.1002687610552697; -0.046048339519528705;;]
+    @test gnr_ses_res["δ"] == [0.16830835612691358; 0.7688330072496795; 0.06571422537798424; -0.03985539721866669;;]
     
     @test Optim.converged(gnr_ses_res["gmm_optim_results"]) 
 

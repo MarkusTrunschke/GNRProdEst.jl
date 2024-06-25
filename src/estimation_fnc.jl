@@ -271,16 +271,8 @@ function gnrsecondstage!(;data::DataFrame, flexible_input::Symbol, fixed_inputs:
 
     # Get starting values for GMM (Follow replication code of GNR for now)
     fixed_poly = Array{Symbol}[]
-    if called_from_GNRProd == true # If called from within GNRProd, polynomials already exist. Use pure fixed input polynomials (as in GNR replication code)
-        if typeof(fixed_inputs) == Symbol && int_const_series_degree == 1 # If there is only one fixed input and the polynomail degree is one, there is no need to select the correct polynomials
-            fixed_poly = fixed_inputs
-        else
-            s_vec = string.(fes_returns["polynom_series"])
-            strings_to_check = string.(fixed_inputs)
-
-            polynom_series_checked = check_array_string_only_substrings(s_vec = s_vec, strings_to_check = strings_to_check)
-            fixed_poly = Symbol.(polynom_series_checked[findall(polynom_series_checked[:, 2]), :][:,1])
-        end
+    if int_const_series_degree == 1 # If there is only one fixed input and the polynomail degree is one, there is no need to select the correct polynomials
+        fixed_poly = fixed_inputs
     else # If not called from within GNRProd, generate polynomials from fixed inputs
         fixed_poly = polynom_series!(data = data, var_names = fixed_inputs, degree = int_const_series_degree)
     end
@@ -447,25 +439,26 @@ function ses_predictions!(;data::DataFrame, mathcal_Y_var::Symbol, flexible_inpu
     # First part: ∂C(fixed_inputs)/∂fixed_inputs
     # 1. Match all polynomial series variables to one lower polynomial
     all_inputs = fes_returns["all_inputs"]
-    series_degree = get_input_degree(all_inputs, fes_returns["polynom_series"]) # Degree of input in polynomial series
+    fes_series_degree = get_input_degree(all_inputs, fes_returns["polynom_series"]) # Degree of input in polynomial series
+    ses_series_degree = get_input_degree(all_inputs, fixed_poly) # Degree of input in polynomial series
 
     # Preallocate output matrix
-    constants = Array{Float64}(undef, length(data.ω), size(series_degree)[1] - 2)
-    no_constants = Array{Float64}(undef, length(data.ω), size(series_degree)[1] - 2)
+    constants = Array{Float64}(undef, length(data.ω), size(ses_series_degree)[1] - 2)
+    no_constants = Array{Float64}(undef, length(data.ω), size(fes_series_degree)[1] - 2)
 
     j = 1 # Iterator over output matrix
-    for der_var_row = 2:size(series_degree)[1] - 1 # eachrow(series_degree[begin + 1:end-1,:])
+    for der_var_row = 2:size(ses_series_degree)[1] - 1
 
-        dev_fix_series_degree = copy(series_degree) # Get one degree lower version of series
-        dev_fix_series_degree[der_var_row,:] .= ifelse.(series_degree[der_var_row,:] .> 0, series_degree[der_var_row,:] .- 1, series_degree[der_var_row,:] ) # end-1 b/c only one flex input. If allows more inputs, change to end - number of flex inputs
+        dev_fix_series_degree = copy(ses_series_degree) # Get one degree lower version of series
+        dev_fix_series_degree[der_var_row,:] .= ifelse.(ses_series_degree[der_var_row,:] .> 0, ses_series_degree[der_var_row,:] .- 1, ses_series_degree[der_var_row,:] ) # end-1 b/c only one flex input. If allows more inputs, change to end - number of flex inputs
         C_deg = dev_fix_series_degree[:,dev_fix_series_degree[end,:] .== 0] # Drop columns with zero in flex input row
-
+        
         # Check now which columns of original poly series fits the derivative of the current row (variable)
         match_arr = Array{Union{Symbol, Int}}(undef, 2, size(C_deg)[2]) # This will be an array of original poly series symbols and the column index that fits in the derivative of the series
         match_arr[1,:] .= C_deg[1,:]
         i = 1
         for col in eachcol(C_deg[begin + 1:end,:]) # Leave first row out because it contains symbols of polynomials
-            check_mat = series_degree[begin + 1:end,:] .== col # Check if elements of the current column fit elements of each column of the polynomial series
+            check_mat = ses_series_degree[begin + 1:end,:] .== col # Check if elements of the current column fit elements of each column of the polynomial series
             check_vec = prod.(eachcol(check_mat)) # Resulting vector has 1 if all elements of a column fit the current checked column. Product of all elements of each column
             indices = findall(check_vec)# Get the indices (should only be one at a time) of the fitting column
             if size(indices) != (0,) # If one is found write it into output matrix
@@ -482,21 +475,22 @@ function ses_predictions!(;data::DataFrame, mathcal_Y_var::Symbol, flexible_inpu
             if match_arr[2,col] == 0
                 deriv_C[:,col] .= 1
             else
-                deriv_C[:,col] .= data[!,fes_returns["polynom_series"][match_arr[2,col]]]
+                # deriv_C[:,col] .= data[!,fes_returns["polynom_series"][match_arr[2,col]]]
+                deriv_C[:,col] .= data[!,fixed_poly[match_arr[2,col]]]
             end
         end
         
-        # Calculate value of part of the derivative of the polynomial series corresponding to the current variable (row in series_degree)
-        constants[:, j] .= deriv_C * (series_degree[der_var_row,series_degree[end,:] .== 0] .* α)
+        # Calculate value of part of the derivative of the polynomial series corresponding to the current variable (row in ses_series_degree)
+        constants[:, j] .= deriv_C * (ses_series_degree[der_var_row,ses_series_degree[end,:] .== 0] .* α)
 
         j += 1 # Increase loop counter
     end
 
     j = 1
-    for der_var_row = 2:size(series_degree)[1] - 1 # eachrow(series_degree[begin + 1:end-1,:])
+    for der_var_row = 2:size(fes_series_degree)[1] - 1
 
-        dev_fix_series_degree = copy(series_degree) # Get one degree lower version of series
-        dev_fix_series_degree[der_var_row,:] .= ifelse.(series_degree[der_var_row,:] .> 0, series_degree[der_var_row,:] .- 1, series_degree[der_var_row,:] ) # end-1 b/c only one flex input. If allows more inputs, change to end - number of flex inputs
+        dev_fix_series_degree = copy(fes_series_degree) # Get one degree lower version of series
+        dev_fix_series_degree[der_var_row,:] .= ifelse.(fes_series_degree[der_var_row,:] .> 0, fes_series_degree[der_var_row,:] .- 1, fes_series_degree[der_var_row,:] ) # end-1 b/c only one flex input. If allows more inputs, change to end - number of flex inputs
         dev_fix_series_degree[end,:] .= dev_fix_series_degree[end,:] .+ 1
         
         noC_deg = copy(dev_fix_series_degree)
@@ -506,7 +500,7 @@ function ses_predictions!(;data::DataFrame, mathcal_Y_var::Symbol, flexible_inpu
         match_arr[1,:] .= noC_deg[1,:]
         i = 1
         for col in eachcol(noC_deg[begin + 1:end,:]) # Leave first row out because it contains symbols of polynomials
-            check_mat = series_degree[begin + 1:end,:] .== col # Check if elements of the current column fit elements of each column of the polynomial series
+            check_mat = fes_series_degree[begin + 1:end,:] .== col # Check if elements of the current column fit elements of each column of the polynomial series
             check_vec = prod.(eachcol(check_mat)) # Resulting vector has 1 if all elements of a column fit the current checked column. Product of all elements of each column
             indices = findall(check_vec)# Get the indices (should only be one at a time) of the fitting column
             if size(indices) != (0,) # If one is found write it into output matrix
@@ -527,16 +521,15 @@ function ses_predictions!(;data::DataFrame, mathcal_Y_var::Symbol, flexible_inpu
             end
         end
 
-        # Calculate value of part of the derivative of the polynomial series corresponding to the current variable (row in series_degree)
-        no_constants[:, j] .= deriv_noC * (series_degree[der_var_row, :] .* fes_returns["γ_flex"][begin + 1:end])
-
+        # Calculate value of part of the derivative of the polynomial series corresponding to the current variable (row in fes_series_degree)
+        no_constants[:, j] .= deriv_noC * (fes_series_degree[der_var_row, :] .* fes_returns["γ_flex"][begin + 1:end])
         
         j += 1 # Increase loop counter
     end
 
     # Calculate elasticities of fixed inputs (are the sum of the constant and non-constant elasticity parts)
     fixed_elas = no_constants .+ constants
-
+    
     # Put results in dataframe
     j = 1
     for input in fixed_inputs

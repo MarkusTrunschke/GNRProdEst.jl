@@ -302,6 +302,9 @@ function startvalues(;data::DataFrame, Y_var::Symbol, X_vars::Union{Symbol,Array
     if (opts["fes_print_starting_values"] == true && stage == "first stage") | (opts["ses_print_starting_values"] == true && stage == "second stage")
         
         print_tab = hcat(vcat([:constant], X_vars), startvals)
+        if stage == "second stage"
+            print_tab = hcat(vcat([:constant], X_vars), startvals)[begin+1:end, :] # Because we don't need the constant in the second stage
+        end
         header = (["Variable", "Value"])
 
         # Make first character uppercase if it is lowercase
