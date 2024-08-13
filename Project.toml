@@ -1,7 +1,7 @@
 name = "GNRProdEst"
 uuid = "c5ad59e2-017c-4e02-9cbc-8c6117b2c1fd"
 authors = ["Markus Trunschke"]
-version = "1.1"
+version = "1.1.0"
 
 [deps]
 Compat = "34da2185-b29b-5c13-b0c7-acf172513d20"
@@ -10,6 +10,7 @@ Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 NaNMath = "77ba4419-2d1f-58cd-9bb1-8ffee604a2e3"
 Optim = "429524aa-4258-5aef-a3af-852621145aeb"
+PkgDependency = "9eb5382b-762c-48ca-8139-e736883fe800"
 PrettyTables = "08abe8d2-0d0c-5749-adfa-8a2ac140af0d"
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 ShiftedArrays = "1277b4bf-5013-50f5-be3d-901d8477a67a"
@@ -17,12 +18,12 @@ Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
 
 [compat]
 Compat = "4"
-DataFrames = "1.6"
+DataFrames = "1"
 Distributions = "0"
 LinearAlgebra = "1"
 NaNMath = "1"
 Optim = "1.9"
-PrettyTables = "2.3"
+PrettyTables = "2"
 Random = "1"
 ShiftedArrays = "2"
 Statistics = "1"
