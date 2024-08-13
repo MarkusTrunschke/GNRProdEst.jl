@@ -5,7 +5,11 @@ using GNRProdEst, DataFrames, CSV, Test, Optim
 @testset "GNRProdEst.jl" begin
 
     # Read in replication data
-    rep_data = CSV.read("test/GNR_data_500.csv", DataFrame)
+    if last(pwd(), 4) == "test"
+        rep_data = CSV.read(joinpath(pwd(),"GNR_data_500.csv"), DataFrame)
+    elseif last(pwd(), 12) == "NRProdEst.jl"
+        rep_data = CSV.read(joinpath(pwd(),"test","GNR_data_500.csv"), DataFrame)
+    end
 
     # Define some options to print results
     opts = Dict("ses_optimizer_options" => Optim.Options(f_tol = 1e-12,
