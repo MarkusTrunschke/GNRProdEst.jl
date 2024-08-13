@@ -27,6 +27,7 @@ using GNRProdEst, DataFrames, CSV, Test, Optim
                                                             ln_share_flex_y = :si, 
                                                             id = :id, 
                                                             time = :time,
+                                                            boot_reps = 10,
                                                             opts = opts
                                                     );
 
