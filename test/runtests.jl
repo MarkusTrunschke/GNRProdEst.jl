@@ -8,24 +8,23 @@ using GNRProdEst, DataFrames, CSV, Test, Optim
     rep_data = CSV.read("test/GNR_data_500.csv", DataFrame)
 
     # Define some options to print results
-    opts = Dict("fes_print_results" => true,
-    
-                "ses_print_starting_values" => true,
-                "ses_print_results" => true,
-                "ses_optimizer_options" => Optim.Options(f_tol = 1e-12,
+    opts = Dict("ses_optimizer_options" => Optim.Options(f_tol = 1e-12,
                                                          x_tol = 1e-12,
-                                                         g_tol = 1e-12)
+                                                         g_tol = 1e-12),
+                "fes_print_results" => true,
+                "fes_print_starting_values" => true
                 )
 
     # Run both estimation stages at the same time
     gnr_fes_res, gnr_ses_res = GNRProdEst.gnrprodest(data = rep_data, 
-                                    output = :yg, 
-                                    flexible_input = :i, 
-                                    fixed_inputs = :k, 
-                                    ln_share_flex_y = :si, 
-                                    id = :id, 
-                                    time = :time,
-                                    opts = opts);
+                                                            output = :yg, 
+                                                            flexible_input = :i, 
+                                                            fixed_inputs = :k, 
+                                                            ln_share_flex_y = :si, 
+                                                            id = :id, 
+                                                            time = :time,
+                                                            opts = opts
+                                                    );
 
     @test gnr_fes_res["γ"] ≈  [0.6523861637358107
                               -0.0011171888341931346

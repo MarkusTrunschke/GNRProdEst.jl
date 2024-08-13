@@ -162,7 +162,7 @@ function opts_filler(opts::Dict)
         new_opts["fes_optimizer"] = NelderMead()
     end
     if "fes_optimizer_options" ∉ keys(new_opts)
-        new_opts["fes_optimizer_options"] = Optim.Options(iterations = 100000,
+        new_opts["fes_optimizer_options"] = Optim.Options(iterations = 20000,
                                                       f_tol = 1e-9,
                                                       x_tol = 1e-12,
                                                       g_tol = 1e-13, # √(Σ(yᵢ-ȳ)²)/n ≤ 1.0e-13 (only sets g_abstol, not outer_g_abstol)
@@ -180,7 +180,7 @@ function opts_filler(opts::Dict)
         new_opts["ses_optimizer"] = NelderMead()
     end
     if "ses_optimizer_options" ∉ keys(new_opts)
-        new_opts["ses_optimizer_options"] = Optim.Options(iterations = 100000,
+        new_opts["ses_optimizer_options"] = Optim.Options(iterations = 20000,
                                                       f_tol = 1e-9,
                                                       x_tol = 1e-12,
                                                       g_tol = 1e-13, # √(Σ(yᵢ-ȳ)²)/n ≤ 1.0e-13 (only sets g_abstol, not outer_g_abstol)
@@ -196,6 +196,18 @@ function opts_filler(opts::Dict)
     end
     if "ses_print_results" ∉ keys(new_opts)
         new_opts["ses_print_results"] = false
+    end
+
+    if "print_results" ∉ keys(new_opts)
+        opts["print_results"] = true
+    end
+
+    if "maxboottries" ∉ keys(new_opts)
+        new_opts["maxboottries"] = 10
+    end
+
+    if "called_from_bootstrapping" ∉ keys(new_opts)
+        opts["called_from_bootstrapping"] = false
     end
     
     return new_opts
@@ -299,7 +311,7 @@ function startvalues(;data::DataFrame, Y_var::Symbol, X_vars::Union{Symbol,Array
     end
 
     # Print results if specified
-    if (opts["fes_print_starting_values"] == true && stage == "first stage") | (opts["ses_print_starting_values"] == true && stage == "second stage")
+    if ((opts["fes_print_starting_values"] == true && stage == "first stage") || (opts["ses_print_starting_values"] == true && stage == "second stage")) && opts["called_from_bootstrapping"] == false
         
         print_tab = hcat(vcat([:constant], X_vars), startvals)
         if stage == "second stage"

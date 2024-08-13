@@ -11,25 +11,27 @@ function gnrprodest(;data::DataFrame,
                   share_degree::Int = 3,
                   lm_tfp_degree::Int = 3,
                   int_const_series_degree::Int = 3,
+                  boot_reps::Int = 200,
                   opts::Dict = Dict())
 
     est_data = copy(data)
     
-    fes_returns, ses_returns = gnrprodest!(data = est_data, 
-                                                 output = output, 
-                                                 flexible_input = flexible_input, 
-                                                 fixed_inputs = fixed_inputs, 
-                                                 ln_share_flex_y = ln_share_flex_y, 
-                                                 id = id, 
-                                                 time = time, 
-                                                 fes_starting_values = fes_starting_values,
-                                                 ses_starting_values = ses_starting_values,
-                                                 share_degree = share_degree,
-                                                 lm_tfp_degree = lm_tfp_degree,
-                                                 int_const_series_degree = int_const_series_degree,
-                                                 opts = opts)
+    fes_returns, ses_returns, all_returns = gnrprodest!(data = est_data, 
+                                           output = output, 
+                                           flexible_input = flexible_input, 
+                                           fixed_inputs = fixed_inputs, 
+                                           ln_share_flex_y = ln_share_flex_y, 
+                                           id = id, 
+                                           time = time, 
+                                           fes_starting_values = fes_starting_values,
+                                           ses_starting_values = ses_starting_values,
+                                           share_degree = share_degree,
+                                           lm_tfp_degree = lm_tfp_degree,
+                                           int_const_series_degree = int_const_series_degree,
+                                           boot_reps = boot_reps,
+                                           opts = opts)
     
-    return fes_returns, ses_returns, est_data
+    return fes_returns, ses_returns, all_returns, est_data
 end
 
 ## General estimation command that modifies its inputs (mostly the dataframe)
@@ -45,6 +47,7 @@ function gnrprodest!(;data::DataFrame,
                   share_degree::Int = 3,
                   lm_tfp_degree::Int = 3,
                   int_const_series_degree::Int = 3,
+                  boot_reps::Int = 200,
                   opts::Dict = Dict()
                   )
               
@@ -60,19 +63,69 @@ function gnrprodest!(;data::DataFrame,
     ## Run data preparation to ensure inputs are working with internals
     _, _, ln_share_flex_y = prep_data!(data, output = output, flexible_input = flexible_input, fixed_inputs = fixed_inputs, ln_share_flex_y = ln_share_flex_y, id = id, time = time)
 
-    ## Run first stage estimation
-    fes_returns = gnrfirststage!(data = data, output = output, flexible_input = flexible_input, fixed_inputs = fixed_inputs, ln_share_flex_y = ln_share_flex_y, share_degree = share_degree, starting_values = fes_starting_values, opts = opts)
+    # Run point estimation
+    # if opts["print_results"] == true
+    #     opts["fes_print_results"] = false
+    #     opts["ses_print_results"] = false
+    # end
+    fes_returns, ses_returns = gnr_estimation!(data = data, 
+                                               output = output, 
+                                               flexible_input = flexible_input, 
+                                               fixed_inputs = fixed_inputs, 
+                                               ln_share_flex_y = ln_share_flex_y, 
+                                               id = id, 
+                                               time = time, 
+                                               fes_starting_values = fes_starting_values,
+                                               ses_starting_values = ses_starting_values,
+                                               share_degree = share_degree,
+                                               lm_tfp_degree = lm_tfp_degree,
+                                               int_const_series_degree = int_const_series_degree,
+                                               opts = opts
+                                              )
 
-    ## Run second stage estimation
-    ses_returns = gnrsecondstage!(data = data, id = id, time = time, fixed_inputs = fixed_inputs, flexible_input = flexible_input, starting_values = ses_starting_values, lm_tfp_degree = lm_tfp_degree, int_const_series_degree = int_const_series_degree, called_from_GNRProd = true, fes_returns = fes_returns, opts = opts)
+    ## Calculate SEs and related stats
+    all_returns = gnr_SE_stats(data = data, id = id, time = time, output = output, fixed_inputs = fixed_inputs, flexible_input = flexible_input, ln_share_flex_y = ln_share_flex_y, share_degree = share_degree, lm_tfp_degree = lm_tfp_degree, int_const_series_degree = int_const_series_degree, point_est = [mean(Array(data[!,[Symbol.(fixed_inputs,"_elas")..., Symbol.(flexible_input,"_elas")]]), dims = 1)..., ses_returns["δ"]...], fes_starting_values = fes_starting_values, ses_starting_values = ses_starting_values, boot_reps = boot_reps, opts = opts)
+
+    if opts["print_results"] == true
+        print_all_res(data, all_returns)
+    end
 
     # Return return dictionarys from both stages
-    return fes_returns, ses_returns
+    return fes_returns, ses_returns, all_returns
+end
+
+## Function combining both stages
+function gnr_estimation!(;data::DataFrame, 
+                         output::Symbol, 
+                         flexible_input::Symbol, 
+                         fixed_inputs::Union{Symbol,Array{Symbol}}, 
+                         ln_share_flex_y::Symbol = :NotDefinedByUser, 
+                         id::Symbol, 
+                         time::Symbol,
+                         fes_starting_values::Vector = [missing],
+                         ses_starting_values::Vector = [missing],
+                         share_degree::Int = 3,
+                         lm_tfp_degree::Int = 3,
+                         int_const_series_degree::Int = 3,
+                         opts::Dict = Dict()
+                       )
+
+    ## Run first stage estimation
+    fes_returns = gnrfirststage!(data = data, output = output, flexible_input = flexible_input, fixed_inputs = fixed_inputs, ln_share_flex_y = ln_share_flex_y, share_degree = share_degree, starting_values = fes_starting_values, opts = opts)
+    
+    ## Run second stage estimation
+    ses_returns = gnrsecondstage!(data = data, id = id, time = time, fixed_inputs = fixed_inputs, flexible_input = flexible_input, starting_values = ses_starting_values, lm_tfp_degree = lm_tfp_degree, int_const_series_degree = int_const_series_degree, called_from_GNRProd = true, fes_returns = fes_returns, opts = opts)
+    
+    if opts["called_from_bootstrapping"] == false
+        return fes_returns, ses_returns
+    else
+        return [mean(Array(data[!,[fixed_inputs..., flexible_input]]), dims = 1)..., ses_returns["δ"]...] # Return mean elasticities and LoM for ω parameters
+    end
 end
 
 ## First stage function
 function gnrfirststage!(;data::DataFrame, output::Symbol, flexible_input::Union{Symbol,Array{Symbol}}, fixed_inputs::Union{Symbol,Array{Symbol}}, ln_share_flex_y::Symbol, share_degree::Int = 3, starting_values::Vector = [missing], opts::Dict=Dict())
-    
+
     # Clean inputs to make them comform with the rest of the program
     fixed_inputs, flexible_input, starting_values, _ = GNR_input_cleaner!(fixed_inputs = fixed_inputs, flexible_input = flexible_input, fes_starting_values = starting_values)
  
@@ -99,7 +152,7 @@ function gnrfirststage!(;data::DataFrame, output::Symbol, flexible_input::Union{
     fes_res, E = fes_predictions!(data = data, ln_share_flex_y = ln_share_flex_y, flexible_input = flexible_input, input_var_symbols = polynom_input_symbols, γ_dash = γ_dash, output = output)
     
     # Print results
-    if opts["fes_print_results"] == true
+    if opts["fes_print_results"] == true && opts["called_from_bootstrapping"] != true
         fes_print_res(fes_res, opts)
     end
 
@@ -142,7 +195,7 @@ end
 
 ## First stage estimation function
 function fes_est(; data::DataFrame, ln_share_flex_y::Symbol, input_var_symbols::Array{Symbol}, method::String, starting_values::Vector, opts::Dict)
-    
+
     if method == "OLS" # The GNR replication code uses a non-linear regression of the shares onto the natural logarithm of the polynomials for the first stage. However, this seems unnecessary. I cannot see any reason not to simply take the exponential of the shares onto the polynomials. This is a linear regression estimated by OLS. It is much faster to calculate and much more robust because it is not a numerical optimization but has a simple analytical solution.
         # Define matrices for OLS
         Y = exp.(data[:,ln_share_flex_y])
@@ -161,7 +214,6 @@ function fes_est(; data::DataFrame, ln_share_flex_y::Symbol, input_var_symbols::
         # Get matrices
         X = Matrix(hcat(data.constant, Matrix(data[:,input_var_symbols])))
         Y = data[:, ln_share_flex_y]
-        # Y = exp.(data[:, ln_share_flex_y])
 
         if any((X*γ_start) .< 0)
             throw("Error: Innver formula of NLLS function is already negative at starting values. Provide starting values manually or check for errors in data.")
@@ -169,9 +221,9 @@ function fes_est(; data::DataFrame, ln_share_flex_y::Symbol, input_var_symbols::
 
         # Allocate cache
         c = (cache1 = Array{Float64}(undef, length(Y), 1),
-                obj = [1.0]
+                obj = [1.0],
         )
-        
+
         fes_res = optimize(γ -> NLLS_criterion!(γ, Y, X, c), γ_start, opts["fes_optimizer"], opts["fes_optimizer_options"])
 
         # Stop if algorithm did not converge
@@ -189,7 +241,7 @@ end
 
 ## Nonlinear least squares criterion function for the first stage
 function NLLS_criterion!(γ, Y, X, c)
-    
+
     mul!(c.cache1,X,γ)
     c.cache1 .= (Y .- NaNMath.log.(c.cache1)) .^2
 
@@ -289,7 +341,7 @@ function gnrsecondstage!(;data::DataFrame, flexible_input::Symbol, fixed_inputs:
     ses_predictions!(data = data, mathcal_Y_var = mathcal_Y_var, flexible_input = flexible_input, fixed_inputs = fixed_inputs, fixed_poly = fixed_poly, fes_returns = fes_returns, α = Optim.minimizer(ses_gmm_res))
 
     # Print results
-    if opts["ses_print_results"] == true
+    if opts["ses_print_results"] == true && opts["called_from_bootstrapping"] != true
         ses_print_res(data = data, all_inputs = vec(hcat(fixed_inputs..., flexible_input)), fixed_poly = fixed_poly, δ = δ, α = Optim.minimizer(ses_gmm_res), lm_tfp_degree =lm_tfp_degree, opts = opts)
     end
 
@@ -367,7 +419,7 @@ function ses_est(;data::DataFrame, fixed_poly::Vector{Symbol}, starting_values::
                        starting_values,
                        opts["ses_optimizer"], 
                        opts["ses_optimizer_options"])
-
+    
     # Stop if algorithm did not converge
     if !Optim.converged(gmm_res)
         throw("Second stage optimization algorithm did not converge! Choose another optimizer, change optimizer settings or convergence criteria, and inspect your data carefully.")
@@ -404,9 +456,9 @@ function ses_gmm!(;α::Array{<:Number},
     mul!(c.cache1, fixed_poly_mat, α)
     c.cache1 .= mathcal_Y_vec .- c.cache1 # c.cache1 is now w
     mul!(c.cache2, fixed_poly_lag_mat, α)
-    c.X[:,2] .= lag_mathcal_Y_vec .- c.cache2 # X = hcat(constant, w_lag_mat)
+    c.X[:,begin+1] .= lag_mathcal_Y_vec .- c.cache2 # X = hcat(constant, w_lag_mat)
 
-    polynomial_fnc_fast!(@view(c.X[:,2:end]), lm_tfp_degree, par_cal = false) # Fill X with polynomials of w
+    polynomial_fnc_fast!(@view(c.X[:,begin+1:end]), lm_tfp_degree, par_cal = false) # Fill X with polynomials of w
 
     # OLS
     mul!(c.cache3, c.X', c.X) # X'X
@@ -596,4 +648,159 @@ function ses_print_res(; data::DataFrame, all_inputs::Array{Symbol}, fixed_poly,
     pretty_table(lm_prod_table, header = header_par, formatters =  ft_printf("%5.5f"), limit_printing = false)
 
     return nothing
+end
+
+## Function calculating some SE related statistics
+function gnr_SE_stats(;data::DataFrame, 
+                       output::Symbol, 
+                       flexible_input::Symbol, 
+                       fixed_inputs::Union{Symbol,Array{Symbol}}, 
+                       ln_share_flex_y::Symbol = :NotDefinedByUser, 
+                       id::Symbol, 
+                       time::Symbol,
+                       fes_starting_values::Vector = [missing],
+                       ses_starting_values::Vector = [missing],
+                       share_degree::Int = 3,
+                       lm_tfp_degree::Int = 3,
+                       int_const_series_degree::Int = 3,
+                       boot_reps::Int = 200,
+                       point_est::Vector{<:Number},
+                       opts::Dict
+                     )
+
+    # Run Bootstrap repetitions
+    res_vec = gnrbootstrapping(data = data, id = id, time = time, output = output, fixed_inputs = fixed_inputs, flexible_input = flexible_input, ln_share_flex_y = ln_share_flex_y, share_degree = share_degree, lm_tfp_degree = lm_tfp_degree, int_const_series_degree = int_const_series_degree, fes_starting_values = fes_starting_values, ses_starting_values = ses_starting_values, boot_reps = boot_reps, opts = opts)
+    
+    # Calculate variances
+    var_vec = vec(var(res_vec, dims = 1))
+
+    # Calculate some quantities
+    se_vec  = sqrt.(var_vec)
+ 
+    ## Inference (see Cameron and Trivado (2005) ch.11)
+    # Calculate t-statistic
+    tstat_vec = point_est ./ se_vec
+ 
+    # Confidence intervals (using N(0,1))
+    conf_low_vec  = point_est - 1.96.*vec(se_vec)
+    conf_high_vec = point_est + 1.96.*vec(se_vec)
+ 
+    # P-values (using N(0,1))
+    pvalues_vec = 2 .*(1 .- cdf.(Normal(),abs.(tstat_vec)))
+
+    # Generate output table
+    # Generate symbols for ω lom
+    lom_sym_vec = ["cons"]
+
+    for j = 1:lm_tfp_degree
+        if j == 1
+            lom_sym_vec = hcat(lom_sym_vec, "ω")
+        elseif j > 1
+            lom_sym_vec = hcat(lom_sym_vec, "ω"*string(superscript_this!(string(j))))
+        end
+    end
+
+    # Combine all
+    all_var_vec = ["mean elasticity: " .* string(flexible_input), ["mean elasticity: " .* string(fixed_inputs...)]..., lom_sym_vec...]
+    
+    return DataFrame(Variable = vec(all_var_vec), Stat = point_est,
+                     SE = vec(se_vec), t_stat = vec(tstat_vec),
+                     P_Value = vec(pvalues_vec), Conf_low = vec(conf_low_vec),
+                     Conf_high = vec(conf_high_vec))
+end
+
+## Bootstrapping
+function gnrbootstrapping(;data::DataFrame, 
+                           output::Symbol, 
+                           flexible_input::Symbol, 
+                           fixed_inputs::Union{Symbol,Array{Symbol}}, 
+                           ln_share_flex_y::Symbol = :NotDefinedByUser, 
+                           id::Symbol, 
+                           time::Symbol,
+                           fes_starting_values::Vector = [missing],
+                           ses_starting_values::Vector = [missing],
+                           share_degree::Int = 3,
+                           lm_tfp_degree::Int = 3,
+                           int_const_series_degree::Int = 3,
+                           boot_reps::Int = 200,
+                           opts::Dict
+                          )
+    
+    # Preallocate cache
+    res_vec = Array{Float64}(undef, boot_reps, length(fixed_inputs) + lm_tfp_degree + 2 ) # + 2 because of flexible input and constant of LoM of tfp
+
+    # Tell gnr_estimation to olny return important values
+    opts["called_from_bootstrapping"] = true
+
+    # Run bootstrap loop
+    # Threads.@threads for rep = 1:boot_reps
+    Threads.@threads for rep = 1:boot_reps
+            successfull_rep_flag = false
+        while successfull_rep_flag == false
+
+            ntry = 1 # Counts iterations of the same bootstrap repetition (increases if estimation fails)
+            successfull_rep_flag = false # Define exit flag
+
+            # Draw bootstrap sample
+            boot_data = draw_sample(data = data, id = id)
+
+            try
+                res_vec[rep,:] .=  gnr_estimation!(data = boot_data, 
+                                                       output = output, 
+                                                       flexible_input = flexible_input, 
+                                                       fixed_inputs = fixed_inputs, 
+                                                       ln_share_flex_y = ln_share_flex_y, 
+                                                       id = :unique_id, 
+                                                       time = time, 
+                                                       fes_starting_values = fes_starting_values,
+                                                       ses_starting_values = ses_starting_values,
+                                                       share_degree = share_degree,
+                                                       lm_tfp_degree = lm_tfp_degree,
+                                                       int_const_series_degree = int_const_series_degree,
+                                                       opts = opts
+                                                      )        
+            catch
+                if ntry < opts["maxboottries"]
+                    ntry += 1
+                    continue # Continue without increasing counter to restart iteration
+                else
+                    throw("Error: Maximal number of bootstrap iteration tries reached at bootstrap repetition "*string(rep))
+                end
+            end
+
+            # Print status and change exit flag
+            print(".")
+            successfull_rep_flag = true
+        end
+    end
+
+    # Delete internal option
+    opts = delete!(opts,"called_from_bootstrapping")
+
+    return res_vec
+end
+
+## Function drawing a sample of firms
+function draw_sample(;data::DataFrame, id::Symbol)
+
+    id_list = unique(data[!, id])
+    
+    ## Randomly chose observation
+    # Generate vector with sample of IDs
+    boot_choose = DataFrame(id => sample(id_list, length(id_list); replace=true))
+
+    # Add unique identifier
+    boot_choose.unique_id = range(1,length = length(boot_choose[!, id]))
+
+    # Select obs in dataset that match the drawn numbers
+    sample_data = innerjoin(data, boot_choose, on = id)
+
+    return sample_data
+end
+
+## Function to print results after all estimations are done
+function print_all_res(data::DataFrame, all_res_tab::DataFrame)
+        println()
+        println("Number of observations: "*string(size(data)[1]))
+        pretty_table(all_res_tab, show_subheader = false, formatters =  ft_printf("%5.5f"), limit_printing = false)
 end
