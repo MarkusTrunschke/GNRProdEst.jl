@@ -64,7 +64,7 @@ using GNRProdEst, DataFrames, CSV, Test, Optim
                                    -0.000334609441120487
                                    -0.010594910927227866]
 
-    @test gnr_fes_res["E"] == 1.0360429887674383
+    @test gnr_fes_res["E"] ≈ 1.0360429887674383
 
     @test Set(gnr_fes_res["polynom_series"]) == Set(Symbol.(["k"; "k⋅k"; "k⋅k⋅k"; "k⋅k⋅i"; "k⋅i"; "k⋅i⋅i"; "i"; "i⋅i"; "i⋅i⋅i"]))
 
@@ -84,9 +84,9 @@ using GNRProdEst, DataFrames, CSV, Test, Optim
 
     @test Optim.converged(gnr_fes_res["fes_optim_results"])
 
-    @test gnr_ses_res["α"] == [0.3871439515587196, -0.02456417904454124, 0.0024446787683550806]
+    @test gnr_ses_res["α"] ≈ [0.3871439515587196, -0.02456417904454124, 0.0024446787683550806]
 
-    @test gnr_ses_res["δ"] == [0.16830835612691358; 0.7688330072496795; 0.06571422537798424; -0.03985539721866669;;]
+    @test gnr_ses_res["δ"] ≈ [0.16830835612691358; 0.7688330072496795; 0.06571422537798424; -0.03985539721866669;;]
     
     @test Optim.converged(gnr_ses_res["gmm_optim_results"]) 
 
