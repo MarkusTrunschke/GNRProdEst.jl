@@ -207,7 +207,7 @@ function opts_filler(opts::Dict)
     end
 
     if "called_from_bootstrapping" ∉ keys(new_opts)
-        opts["called_from_bootstrapping"] = false
+        new_opts["called_from_bootstrapping"] = false # Must be new_opts, not opts: new_opts is a copy whenever the caller passes a narrower Dict (e.g. Dict{String,Bool}), and new_opts is what gets returned
     end
     
     return new_opts

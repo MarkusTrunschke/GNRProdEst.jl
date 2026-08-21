@@ -41,6 +41,7 @@ All arguments in any of the functions are keyword arguments. The necessary argum
 - `fes_starting_values` is a vector of starting values for the first stage non-linear least squares regression. If the user does not define them, the package chooses them using a linear regression.
 - `ses_starting_values` is a vector of starting values for the second stage GMM estimation routine. If the user does not define them, the package chooses them using a linear regression.
 - `boot_reps` is an integer indicating the number of repetitions the Bootstrap algorithm uses in the standard error estimation. The default is 200.
+  Bootstrapping is by far the slowest part of the estimation because every repetition re-estimates both stages. The repetitions run on Julia's threads, so starting Julia with several threads speeds this up considerably (e.g. `julia --threads=auto`, or set the `JULIA_NUM_THREADS` environment variable). With a single thread they run one after another.
 - `opts` is a dictionary of futher options.
     - `fes_print_starting_values` prints first stage starting values if set to `true`.
     - `fes_print_results` prints first stage results if set to `true`.
@@ -102,16 +103,16 @@ Output should be
 .......................................................................................
 ..........................
 Number of observations: 14500
-┌────────────────────┬──────────┬─────────┬──────────┬─────────┬──────────┬───────────┐
-│           Variable │     Stat │      SE │   t_stat │ P_Value │ Conf_low │ Conf_high │
-├────────────────────┼──────────┼─────────┼──────────┼─────────┼──────────┼───────────┤
-│ mean elasticity: i │  0.28664 │ 0.07321 │  3.91529 │ 0.00009 │  0.14315 │   0.43013 │
-│ mean elasticity: k │  0.62627 │ 0.06637 │  9.43551 │ 0.00000 │  0.49618 │   0.75637 │
-│               cons │  0.16831 │ 0.03189 │  5.27709 │ 0.00000 │  0.10580 │   0.23082 │
-│                  ω │  0.76883 │ 0.04673 │ 16.45362 │ 0.00000 │  0.67725 │   0.86042 │
-│                 ω² │  0.06571 │ 0.06038 │  1.08843 │ 0.27641 │ -0.05262 │   0.18405 │
-│                 ω³ │ -0.03986 │ 0.02377 │ -1.67664 │ 0.09361 │ -0.08645 │   0.00674 │
-└────────────────────┴──────────┴─────────┴──────────┴─────────┴──────────┴───────────┘
+┌────────────────────┬──────────┬─────────┬───────────┬─────────┬──────────┬───────────┐
+│           Variable │     Stat │      SE │    t_stat │ P_Value │ Conf_low │ Conf_high │
+├────────────────────┼──────────┼─────────┼───────────┼─────────┼──────────┼───────────┤
+│ mean elasticity: k │  0.28670 │ 0.04377 │   6.54973 │ 0.00000 │  0.20091 │   0.37250 │
+│ mean elasticity: i │  0.62627 │ 0.00151 │ 414.77249 │ 0.00000 │  0.62331 │   0.62923 │
+│               cons │  0.16803 │ 0.03493 │   4.81045 │ 0.00000 │  0.09956 │   0.23649 │
+│                  ω │  0.76907 │ 0.05542 │  13.87800 │ 0.00000 │  0.66045 │   0.87768 │
+│                 ω² │  0.06544 │ 0.06752 │   0.96927 │ 0.33241 │ -0.06689 │   0.19778 │
+│                 ω³ │ -0.03981 │ 0.02510 │  -1.58593 │ 0.11276 │ -0.08900 │   0.00939 │
+└────────────────────┴──────────┴─────────┴───────────┴─────────┴──────────┴───────────┘
 ```
 
 Alternatively, you can estimate both stages sparately with
@@ -184,13 +185,13 @@ All output elasticities:
 │        i │ 0.62627 │ 0.00454 │ 0.60449 │ 0.65235 │
 └──────────┴─────────┴─────────┴─────────┴─────────┘
 Productivity:
-┌──────────┬──────────┬─────────┬──────────┬─────────┐
-│ Variable │     Mean │      SD │      Min │     Max │
-├──────────┼──────────┼─────────┼──────────┼─────────┤
-│        ω │  0.80982 │ 0.34225 │ -0.47409 │ 1.67487 │
-│        Ω │  2.38170 │ 0.82280 │  0.62245 │ 5.33810 │
-│        v │ -0.00007 │ 0.23424 │ -1.27870 │ 1.25506 │
-└──────────┴──────────┴─────────┴──────────┴─────────┘
+┌──────────┬─────────┬─────────┬──────────┬─────────┐
+│ Variable │    Mean │      SD │      Min │     Max │
+├──────────┼─────────┼─────────┼──────────┼─────────┤
+│        ω │ 0.80983 │ 0.34225 │ -0.47409 │ 1.67487 │
+│        Ω │ 2.38171 │ 0.82280 │  0.62245 │ 5.33812 │
+│        v │ 0.80987 │ 0.43333 │ -0.86880 │ 2.30456 │
+└──────────┴─────────┴─────────┴──────────┴─────────┘
 Productivity Law of Motion:
 ┌──────────┬──────────┐
 │ Variable │ Estimate │
@@ -198,7 +199,7 @@ Productivity Law of Motion:
 │ constant │  0.16803 │
 │        ω │  0.76907 │
 │       ω² │  0.06544 │
-│       ω³ │ -0.03980 │
+│       ω³ │ -0.03981 │
 └──────────┴──────────┘
 ```
 ## Contributing
