@@ -119,7 +119,7 @@ function gnr_estimation!(;data::DataFrame,
     if opts["called_from_bootstrapping"] == false
         return fes_returns, ses_returns
     else
-        return [mean(Array(data[!,[fixed_inputs..., flexible_input]]), dims = 1)..., ses_returns["δ"]...] # Return mean elasticities and LoM for ω parameters
+        return [mean(Array(data[!,[Symbol.(fixed_inputs, "_elas")..., Symbol(flexible_input, "_elas")]]), dims = 1)..., ses_returns["δ"]...] # Return mean elasticities and LoM for ω parameters. The "_elas" columns are essential: without them this returns the mean raw log inputs, so the bootstrap variance would not belong to the point estimate in point_est (see gnrprodest!)
     end
 end
 
