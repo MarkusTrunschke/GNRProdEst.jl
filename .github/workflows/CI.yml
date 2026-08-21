@@ -15,6 +15,9 @@ jobs:
   test:
     name: Julia ${{ matrix.version }} - ${{ matrix.os }} - ${{ matrix.arch }} - ${{ github.event_name }}
     runs-on: ${{ matrix.os }}
+    # nightly tracks unreleased julia, so it breaks for reasons outside this package. Let it
+    # report without failing the workflow.
+    continue-on-error: ${{ matrix.version == 'nightly' }}
     timeout-minutes: 60
     permissions: # needed to allow julia-actions/cache to proactively delete old caches that it has created
       actions: write

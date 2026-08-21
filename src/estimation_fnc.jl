@@ -984,8 +984,11 @@ function gnr_SE_stats(;data::DataFrame,
     # Run Bootstrap repetitions
     res_vec = gnrbootstrapping(data = data, id = id, time = time, output = output, fixed_inputs = fixed_inputs, flexible_input = flexible_input, ln_share_flex_y = ln_share_flex_y, share_degree = share_degree, lm_tfp_degree = lm_tfp_degree, int_const_series_degree = int_const_series_degree, fes_starting_values = fes_starting_values, ses_starting_values = ses_starting_values, boot_reps = boot_reps, opts = opts)
     
-    # Calculate variances
-    var_vec = vec(var(res_vec, dims = 1))
+    # Calculate variances. Taken column by column rather than with var(res_vec, dims = 1):
+    # the dims-reducing path in Statistics v1.11 calls a two-argument Base.reducedim1 that no
+    # longer exists on julia nightly, so the matrix form throws a MethodError there. The
+    # one-dimensional form avoids that path and gives the same corrected sample variance.
+    var_vec = [var(@view res_vec[:, j]) for j in axes(res_vec, 2)]
 
     # Calculate some quantities
     se_vec  = sqrt.(var_vec)
