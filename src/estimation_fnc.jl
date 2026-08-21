@@ -701,7 +701,10 @@ function gnr_SE_stats(;data::DataFrame,
     end
 
     # Combine all
-    all_var_vec = ["mean elasticity: " .* string(flexible_input), ["mean elasticity: " .* string(fixed_inputs...)]..., lom_sym_vec...]
+    # Order must match point_est in gnrprodest!: fixed input elasticities first, then the flexible
+    # input, then the law of motion of ω. Broadcasting over fixed_inputs (instead of splatting them
+    # into a single string) is what gives one label per fixed input.
+    all_var_vec = [("mean elasticity: " .* string.(fixed_inputs))..., "mean elasticity: " * string(flexible_input), lom_sym_vec...]
     
     return DataFrame(Variable = vec(all_var_vec), Stat = point_est,
                      SE = vec(se_vec), t_stat = vec(tstat_vec),
