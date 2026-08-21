@@ -297,7 +297,7 @@ function fes_print_res(fes_res::DataFrame, opts::Dict)
     header = (["Variable", "γ", "γ'"])
 
     println("First stage results:")
-    pretty_table(print_tab, header = header, formatters = ft_printf("%5.5f"), limit_printing = false)
+    pretty_table(print_tab, column_labels = header, formatters = [fmt__printf("%5.5f")], limit_printing = false)
 
     return nothing
 end
@@ -637,18 +637,18 @@ function ses_print_res(; data::DataFrame, all_inputs::Array{Symbol}, fixed_poly,
 
     # Print parameters of the GMM estimation
     println("Integration constant series parameters")
-    pretty_table(int_const_tab, header = header_par, formatters =  ft_printf("%5.5f"), limit_printing = false)
+    pretty_table(int_const_tab, column_labels = header_par, formatters = [fmt__printf("%5.5f")], limit_printing = false)
 
     # Print summary stats of all output elasticities of inputs
     println("All output elasticities:")
-    pretty_table(desc_table, header = header_var, formatters =  ft_printf("%5.5f"), limit_printing = false)
+    pretty_table(desc_table, column_labels = header_var, formatters = [fmt__printf("%5.5f")], limit_printing = false)
 
     # Print productivity stats and law of motion parameters
     println("Productivity:")
-    pretty_table(prod_table, header = header_var, formatters =  ft_printf("%5.5f"), limit_printing = false)
+    pretty_table(prod_table, column_labels = header_var, formatters = [fmt__printf("%5.5f")], limit_printing = false)
 
     println("Productivity Law of Motion:")
-    pretty_table(lm_prod_table, header = header_par, formatters =  ft_printf("%5.5f"), limit_printing = false)
+    pretty_table(lm_prod_table, column_labels = header_par, formatters = [fmt__printf("%5.5f")], limit_printing = false)
 
     return nothing
 end
@@ -807,5 +807,5 @@ end
 function print_all_res(data::DataFrame, all_res_tab::DataFrame)
         println()
         println("Number of observations: "*string(size(data)[1]))
-        pretty_table(all_res_tab, show_subheader = false, formatters =  ft_printf("%5.5f"), limit_printing = false)
+        pretty_table(all_res_tab, column_labels = names(all_res_tab), formatters = [fmt__printf("%5.5f")], limit_printing = false)
 end

@@ -325,7 +325,7 @@ function startvalues(;data::DataFrame, Y_var::Symbol, X_vars::Union{Symbol,Array
         end
 
         println(stage*" starting values:")
-        pretty_table(print_tab, header = header, formatters =  ft_printf("%5.5f"), limit_printing = false)
+        pretty_table(print_tab, column_labels = header, formatters = [fmt__printf("%5.5f")], limit_printing = false)
     end
 
     # Return result
