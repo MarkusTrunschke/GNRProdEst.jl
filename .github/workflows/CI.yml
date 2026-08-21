@@ -23,8 +23,9 @@ jobs:
       fail-fast: false
       matrix:
         version:
-          - '1.9'
+          # 1.10 is the floor: PrettyTables 3, ProgressMeter and Optim 2 all require julia >= 1.10
           - '1.10'
+          - '1'
           - 'nightly'
         os:
           - ubuntu-latest
