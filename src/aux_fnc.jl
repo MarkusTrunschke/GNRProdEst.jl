@@ -1,4 +1,20 @@
 ## Function that converts inputs into correct types for my program
+"""
+    GNR_input_cleaner!(; fixed_inputs, flexible_input, fes_starting_values=[missing], ses_starting_values=[missing]) -> Tuple
+
+Bring user-supplied arguments into the shapes the internals expect. Wraps a single
+`Symbol` into a one-element vector, flattens matrices of symbols into vectors, and
+converts integer starting values to floats because the optimizers reject integers.
+
+# Keyword Arguments
+- `fixed_inputs::Union{Array{Symbol},Symbol}`: Fixed input variable(s)
+- `flexible_input::Union{Array{Symbol},Symbol}`: Flexible input variable
+- `fes_starting_values::Union{Vector{<:Number},Vector{Missing}}=[missing]`: First stage starting values
+- `ses_starting_values::Union{Vector{<:Number},Vector{Missing}}=[missing]`: Second stage starting values
+
+# Returns
+- `Tuple`: `(fixed_inputs, flexible_input, fes_starting_values, ses_starting_values)`, cleaned
+"""
 function GNR_input_cleaner!(;fixed_inputs::Union{Array{Symbol},Symbol}, flexible_input::Union{Array{Symbol},Symbol}, fes_starting_values::Union{Vector{<:Number},Vector{Missing}} = vec([missing]), ses_starting_values::Union{Vector{<:Number},Vector{Missing}} = vec([missing]))
     # Convert fixed input into vector of symbols if an array was given
     if typeof(fixed_inputs) == Array || typeof(fixed_inputs) == Matrix{Symbol}
@@ -28,6 +44,22 @@ function GNR_input_cleaner!(;fixed_inputs::Union{Array{Symbol},Symbol}, flexible
 end
 
 ## Function that checks if every input makes sense and thows an error if the user messed up
+"""
+    error_throw_fnc(data, output, flexible_input, fixed_inputs, ln_share_flex_y_var, id, time, opts)
+
+Validate the arguments of the combined estimation routine. Throws if a requested column
+is missing from `data` or if a column that has to be numeric is not. Returns `nothing`.
+
+# Arguments
+- `data::DataFrame`: Dataset to check
+- `output::Symbol`: Output variable column name
+- `flexible_input::Symbol`: Flexible input variable
+- `fixed_inputs::Union{Symbol,Array{Symbol}}`: Fixed input variable(s)
+- `ln_share_flex_y_var::Symbol`: Log flexible input share of output
+- `id::Symbol`: Firm identifier
+- `time::Symbol`: Time identifier
+- `opts::Dict`: Further options
+"""
 function error_throw_fnc(data::DataFrame, 
                          output::Symbol, 
                          flexible_input::Symbol, 
@@ -69,6 +101,21 @@ function error_throw_fnc(data::DataFrame,
     
 end
 
+"""
+    error_throw_fnc_first_stage(data, output, flexible_input, fixed_inputs, ln_share_flex_y_var, opts)
+
+Validate the arguments of the first stage. Same checks as `error_throw_fnc`, without the
+panel identifiers, which the first stage does not need. The share variable is only checked
+when the user supplied one. Returns `nothing`.
+
+# Arguments
+- `data::DataFrame`: Dataset to check
+- `output::Symbol`: Output variable column name
+- `flexible_input::Symbol`: Flexible input variable
+- `fixed_inputs::Union{Symbol,Array{Symbol}}`: Fixed input variable(s)
+- `ln_share_flex_y_var::Symbol`: Log flexible input share of output, or `:NotDefinedByUser`
+- `opts::Dict`: Further options
+"""
 function error_throw_fnc_first_stage(data::DataFrame, 
     output::Symbol,
     flexible_input::Symbol, 
@@ -108,6 +155,20 @@ function error_throw_fnc_first_stage(data::DataFrame,
 
 end
 
+"""
+    error_throw_fnc_sec_stage(data, flexible_input, fixed_inputs, id, time, opts)
+
+Validate the arguments of the second stage. Throws if a requested column is missing from
+`data` or is not numeric. Returns `nothing`.
+
+# Arguments
+- `data::DataFrame`: Dataset to check
+- `flexible_input::Symbol`: Flexible input variable
+- `fixed_inputs::Union{Symbol,Array{Symbol}}`: Fixed input variable(s)
+- `id::Symbol`: Firm identifier
+- `time::Symbol`: Time identifier
+- `opts::Dict`: Further options
+"""
 function error_throw_fnc_sec_stage(data::DataFrame, 
     flexible_input::Symbol, 
     fixed_inputs::Union{Symbol,Array{Symbol}}, 
@@ -143,6 +204,23 @@ function error_throw_fnc_sec_stage(data::DataFrame,
 end
 
 ## Auxiliary function to fill up options that were not given in opts dictionary
+"""
+    opts_filler(opts::Dict) -> Dict{String,Any}
+
+Fill in every option the package needs that the user did not specify. Returns a new
+`Dict{String,Any}`, because a dictionary built from a few options only is typically typed
+too narrowly to hold the optimizer objects and strings added here.
+
+Defaults set are the print flags (all `false` except `print_results`), `fes_method`
+(`"NLLS"`), the first and second stage optimizers (`NelderMead()`) and their
+`Optim.Options`, `maxboottries` (`10`), and `called_from_bootstrapping` (`false`).
+
+# Arguments
+- `opts::Dict`: Options given by the user
+
+# Returns
+- `Dict{String,Any}`: The user's options with all missing entries filled in
+"""
 function opts_filler(opts::Dict)
 
     # Define new opts dictionary because opts can have a too narrow type if the user did only specify a specific subset of options
@@ -199,7 +277,7 @@ function opts_filler(opts::Dict)
     end
 
     if "print_results" ∉ keys(new_opts)
-        opts["print_results"] = true
+        new_opts["print_results"] = true # Must be new_opts, not opts, for the same reason as called_from_bootstrapping below
     end
 
     if "maxboottries" ∉ keys(new_opts)
@@ -214,6 +292,20 @@ function opts_filler(opts::Dict)
 end
 
 ## Function that checks a string to only contain defined substrings
+"""
+    check_str_only_def_substr(s::String, strings_to_check) -> Bool
+
+Test whether a polynomial name is built exclusively from the given variables. Splits `s`
+on the internal separator `⋅` and returns `true` only if every part matches one of
+`strings_to_check`.
+
+# Arguments
+- `s::String`: Polynomial name, e.g. `"k⋅k⋅i"`
+- `strings_to_check::Union{Vector,String,Char}`: Variable name(s) that are allowed to appear
+
+# Returns
+- `Bool`: `true` if all parts of `s` are in `strings_to_check`
+"""
 function check_str_only_def_substr(s::String, strings_to_check::Union{Vector,String,Char})
     parts = split(s, '⋅')
 
@@ -234,6 +326,19 @@ function check_str_only_def_substr(s::String, strings_to_check::Union{Vector,Str
 end
 
 ## Function that iterates over an array of strings and checks if it only contains defined substrings (or "⋅")
+"""
+    check_array_string_only_substrings(; s_vec, strings_to_check) -> Matrix
+
+Apply `check_str_only_def_substr` to a vector of polynomial names. Used to pick the pure
+fixed input polynomials out of the full first stage series.
+
+# Keyword Arguments
+- `s_vec::Vector{String}`: Polynomial names to check
+- `strings_to_check::Union{Vector,String,Char}`: Variable name(s) that are allowed to appear
+
+# Returns
+- `Matrix`: Two columns, the names and a `Bool` per name
+"""
 function check_array_string_only_substrings(;s_vec::Vector{String}, strings_to_check::Union{Vector,String,Char})
     check_res = falses(length(s_vec))
     j = 1
@@ -246,6 +351,20 @@ function check_array_string_only_substrings(;s_vec::Vector{String}, strings_to_c
 end
 
 ## Function to determine the intermediate input variable degree of the polynomial approximation based on the internal naming scheme
+"""
+    get_input_degree(input, all_var_symbols) -> Matrix
+
+Determine how often each input appears in each polynomial of a series, i.e. the degree of
+that input in that term. Counts occurrences in the internal naming scheme, in which the
+components of a polynomial are separated by `⋅`.
+
+# Arguments
+- `input::Union{Symbol,Vector{Symbol}}`: Input(s) whose degree is counted
+- `all_var_symbols::Union{Symbol,Vector{Symbol}}`: Polynomial series names
+
+# Returns
+- `Matrix`: First row holds the polynomial names, row `1 + i` the degree of `input[i]` in each
+"""
 function get_input_degree(input::Union{Symbol,Vector{Symbol}}, all_var_symbols::Union{Symbol,Vector{Symbol}})
     
     # Clean inputs
@@ -276,6 +395,25 @@ function get_input_degree(input::Union{Symbol,Vector{Symbol}}, all_var_symbols::
 end
 
 ## Start values calculation function for the first stage (Currently only an OLS as in GNR 2020))
+"""
+    startvalues(; data, Y_var, X_vars, user_start_vals, stage, opts) -> Vector
+
+Return starting values for one of the two estimation stages. If the user supplied values
+they are passed through unchanged, otherwise they are calculated from an OLS regression of
+`Y_var` on `X_vars`, following the GNR replication code. In the first stage the constant is
+corrected upwards so that the fitted values entering the logarithm are positive.
+
+# Keyword Arguments
+- `data::DataFrame`: Dataset
+- `Y_var::Symbol`: Dependent variable of the auxiliary regression
+- `X_vars::Union{Symbol,Array{Symbol}}`: Independent variables of the auxiliary regression
+- `user_start_vals::Vector{<:Union{Missing, Number}}`: User-supplied starting values, or `[missing]`
+- `stage::String`: `"first stage"` or `"second stage"`
+- `opts::Dict`: Further options, used to decide whether to print the values
+
+# Returns
+- `Vector`: Starting values, including the constant
+"""
 function startvalues(;data::DataFrame, Y_var::Symbol, X_vars::Union{Symbol,Array{Symbol}}, user_start_vals::Vector{<:Union{Missing, Number}}, stage::String, opts::Dict)
     # Check if user-provided starting values are in the right form
     if !(all(ismissing.(user_start_vals)) && length(user_start_vals) == 1)
@@ -333,6 +471,21 @@ function startvalues(;data::DataFrame, Y_var::Symbol, X_vars::Union{Symbol,Array
 end
 
 ## Polynomial series generating function
+"""
+    polynom_series!(; data, var_names, degree) -> Vector{Symbol}
+
+Add all polynomials and interactions of `var_names` up to `degree` to `data` in-place. The
+new columns are named by joining the components with `⋅`, so that the degree of each input
+in each term can be recovered later by `get_input_degree`.
+
+# Keyword Arguments
+- `data::DataFrame`: Data frame to mutate
+- `var_names::Union{Vector{Symbol},Symbol}`: Variable(s) to expand
+- `degree::Int`: Highest polynomial degree, must be at least 1
+
+# Returns
+- `Vector{Symbol}`: Names of the generated columns
+"""
 function polynom_series!(;data::DataFrame, var_names::Union{Vector{Symbol},Symbol}, degree::Int)
 
     # Check if user put in an invalid degree
@@ -388,6 +541,18 @@ function polynom_series!(;data::DataFrame, var_names::Union{Vector{Symbol},Symbo
 end
 
 ## If there are already prepared columns in the dataframe and their values just need to be updated, jump in here. This is the fast version with no dynamic allocations at runtime.
+"""
+    polynomial_fnc_fast!(poly_mat, degree; par_cal=false) -> poly_mat
+
+In-place computation of polynomial terms. Fills columns 2 through `degree` of `poly_mat` with powers 2 through `degree` of column 1. Preallocated matrix avoids allocations during repeated calls.
+
+# Arguments
+- `poly_mat::AbstractArray{<:Number}`: Matrix with base values in column 1
+- `degree::Int`: Highest polynomial degree to compute
+
+# Keyword Arguments
+- `par_cal::Bool=false`: Use `Threads.@threads` for parallel computation
+"""
 function polynomial_fnc_fast!(poly_mat::AbstractArray{<:Number}, degree::Int; par_cal::Bool = false) # AbstractArray covers both Array and the SubArray produced by @view at the call sites, and unlike Union{Array{<:Number},SubArray{<:Number}} it is resolvable by static analysers
     # Compute polynomial columns (each column of the matrix represents the i's polynomial of the first column)
     if par_cal == false
@@ -405,6 +570,25 @@ end
 
 ## Function that generates lagged values in a panel
 # Panel lag function with return df
+"""
+    panel_lag(; data, id, time, variable, lag_prefix="lag_", lags=1, drop_missings=false, force=false) -> DataFrame
+
+Non-mutating version of `panel_lag!`. Copies `data` before lagging, so the caller's data
+frame is left untouched, and returns the copy.
+
+# Keyword Arguments
+- `data::DataFrame`: Data frame to lag
+- `id::Symbol`: Panel identifier column
+- `time::Symbol`: Time variable for ordering
+- `variable::Union{Symbol,Vector{Symbol}}`: Column(s) to lag
+- `lag_prefix::String="lag_"`: Prefix for lag column names
+- `lags::Int=1`: Lag distance
+- `drop_missings::Bool=false`: Drop rows with missing lags
+- `force::Bool=false`: Remove existing lag columns if present
+
+# Returns
+- `DataFrame`: Copy of `data` with the lag columns added
+"""
 function panel_lag(;data::DataFrame, id::Symbol, time::Symbol, variable::Union{Symbol,Vector{Symbol}}, lag_prefix::String = "lag_", lags::Int = 1, drop_missings::Bool = false, force::Bool = false)
     
     # Clean input
@@ -432,6 +616,21 @@ function panel_lag(;data::DataFrame, id::Symbol, time::Symbol, variable::Union{S
 end
 
 # Panel lag function manipulating the original df
+"""
+    panel_lag!(; data, id, time, variable, lag_prefix="lag_", lags=1, drop_missings=false, force=false) -> DataFrame
+
+Compute panel lags in-place using `ShiftedArrays.lag` within groups. Sorts by `id` and `time`, creates lag columns with specified prefix, and validates time gaps.
+
+# Keyword Arguments
+- `data::DataFrame`: Data frame to mutate
+- `id::Symbol`: Panel identifier column
+- `time::Symbol`: Time variable for ordering
+- `variable::Union{Array{Symbol},Symbol}`: Column(s) to lag
+- `lag_prefix::String="lag_"`: Prefix for lag column names
+- `lags::Int=1`: Lag distance
+- `drop_missings::Bool=false`: Drop rows with missing lags
+- `force::Bool=false`: Remove existing lag columns if present
+"""
 function panel_lag!(;data::DataFrame, id::Symbol, time::Symbol, variable::Union{Array{Symbol},Symbol}, lag_prefix::String = "lag_", lags::Int = 1, drop_missings::Bool = false, force::Bool = false)
     
     # Clean input
@@ -457,6 +656,11 @@ function panel_lag!(;data::DataFrame, id::Symbol, time::Symbol, variable::Union{
     return data
 end
 
+"""
+    lagging_that_panel!(; data, id, time, variable, lag_prefix="lag_", lags=1, drop_missings=false) -> DataFrame
+
+Internal helper for `panel_lag!`. Computes lags using `ShiftedArrays.lag` within groups, validates time gaps (sets to `missing` if gap ≠ `lags`), joins back to data, and renames columns.
+"""
 function lagging_that_panel!(;data::DataFrame, id::Symbol, time::Symbol, variable::Union{Symbol,Vector{Symbol}}, lag_prefix::String = "lag_", lags::Int = 1, drop_missings::Bool = false)
 
     # Generate lagged values per id and select all but the original variable (causes problems in join). The ShiftedArrays.lag function names the lagged column itself with variable_lag
@@ -511,6 +715,11 @@ const superscript_map = Dict(
     '+' => '⁺', '-' => '⁻', '=' => '⁼', '(' => '⁽', ')' => '⁾'
 )
 
+"""
+    superscript_this!(c::String) -> Char
+
+Convert first character of string to its Unicode superscript equivalent using `superscript_map`. Returns original character if no superscript exists.
+"""
 function superscript_this!(c::String) # Need to use a string as input because I don't understand Chars in Julia. Char(5) returns a different unicode than string(5). And the superscript of Char(5) does not  work
     # Return the superscript character if it exists in the map, else return the original character
     return get(superscript_map, c[1], c[1])

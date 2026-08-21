@@ -1,3 +1,26 @@
+"""
+    prep_data!(data; output, flexible_input, fixed_inputs, ln_share_flex_y, id, time) -> Tuple
+
+Prepare a dataset for estimation in-place. Reduces `data` to the columns the estimation
+needs, adds a constant column, drops rows with missing values, and derives the log
+flexible input share of output when the user did not supply it, as the difference between
+the log flexible input and log output.
+
+# Arguments
+- `data::DataFrame`: Data frame to mutate
+
+# Keyword Arguments
+- `output::Symbol`: Log output variable
+- `flexible_input::Symbol`: Log flexible input variable
+- `fixed_inputs::Union{Symbol,Array{Symbol}}`: Log fixed input variable(s)
+- `ln_share_flex_y::Symbol`: Log flexible input share of output, or `:NotDefinedByUser` to derive it
+- `id::Symbol`: Firm identifier
+- `time::Symbol`: Time identifier
+
+# Returns
+- `Tuple`: `(data, all_input_symbols, ln_share_flex_y)`, where the last element is the name of
+  the share column actually used
+"""
 function prep_data!(data::DataFrame; output::Symbol, flexible_input::Symbol, fixed_inputs::Union{Symbol,Array{Symbol}}, ln_share_flex_y::Symbol, id::Symbol, time::Symbol)
     
     ## Select necessary variables from data frame

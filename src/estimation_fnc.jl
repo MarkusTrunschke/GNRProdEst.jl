@@ -1,4 +1,46 @@
 ## General estimation command
+"""
+    gnrprodest(; data, output, flexible_input, fixed_inputs, ln_share_flex_y=:NotDefinedByUser, id, time, fes_starting_values=[missing], ses_starting_values=[missing], share_degree=3, lm_tfp_degree=3, int_const_series_degree=3, boot_reps=200, opts=Dict()) -> Tuple
+
+Top-level estimation entry point for gross output production function estimation using the
+approach described in Gandhi, Navarro, and Rivers (2020). Runs both stages, bootstraps
+standard errors, and returns the estimates together with a copy of the data that carries
+the per-observation output elasticities and productivity.
+
+This function does not modify `data`. See `gnrprodest!` for the in-place version.
+
+# Keyword Arguments
+- `data::DataFrame`: Input dataset with (firm-time) panel structure
+- `output::Symbol`: Log output variable
+- `flexible_input::Symbol`: Log flexible input variable (e.g. intermediate inputs)
+- `fixed_inputs::Union{Symbol,Array{Symbol}}`: Log fixed input variable(s) (e.g. capital, labor)
+- `ln_share_flex_y::Symbol=:NotDefinedByUser`: Log flexible input share of output. Derived from `flexible_input` and `output` if not given
+- `id::Symbol`: Firm identifier
+- `time::Symbol`: Time identifier
+- `fes_starting_values::Vector=[missing]`: Starting values for the first stage NLLS regression
+- `ses_starting_values::Vector=[missing]`: Starting values for the second stage GMM estimation
+- `share_degree::Int=3`: Degree of the polynomial series in the share regression
+- `lm_tfp_degree::Int=3`: Degree of the polynomial in the law of motion of ω
+- `int_const_series_degree::Int=3`: Degree of the polynomial series of the constant of integration
+- `boot_reps::Int=200`: Number of bootstrap repetitions for the standard errors
+- `opts::Dict=Dict()`: Further options, see `opts_filler`
+
+# Returns
+- `Tuple`: `(fes_returns, ses_returns, all_returns, est_data)` holding the first stage results,
+  the second stage results, the table of estimates with standard errors, and the prepared data
+
+# Example
+```julia
+fes_res, ses_res, all_res, est_data = gnrprodest(
+    data = df,
+    output = :yg,
+    flexible_input = :i,
+    fixed_inputs = :k,
+    id = :id,
+    time = :time,
+)
+```
+"""
 function gnrprodest(;data::DataFrame, 
                   output::Symbol, 
                   flexible_input::Symbol, 
@@ -35,6 +77,21 @@ function gnrprodest(;data::DataFrame,
 end
 
 ## General estimation command that modifies its inputs (mostly the dataframe)
+"""
+    gnrprodest!(; data, output, flexible_input, fixed_inputs, ln_share_flex_y=:NotDefinedByUser, id, time, fes_starting_values=[missing], ses_starting_values=[missing], share_degree=3, lm_tfp_degree=3, int_const_series_degree=3, boot_reps=200, opts=Dict()) -> Tuple
+
+In-place version of `gnrprodest`. Modifies `data`: it is reduced to the columns the
+estimation needs and gains the polynomial series, the per-observation output elasticities
+(`<input>_elas`), persistent productivity `ω` and `Ω`, total productivity `v`, and the
+first stage residual `ϵ`.
+
+# Keyword Arguments
+See `gnrprodest`.
+
+# Returns
+- `Tuple`: `(fes_returns, ses_returns, all_returns)` holding the first stage results, the
+  second stage results, and the table of estimates with standard errors
+"""
 function gnrprodest!(;data::DataFrame, 
                   output::Symbol, 
                   flexible_input::Symbol, 
@@ -95,6 +152,22 @@ function gnrprodest!(;data::DataFrame,
 end
 
 ## Function combining both stages
+"""
+    gnr_estimation!(; data, output, flexible_input, fixed_inputs, ln_share_flex_y=:NotDefinedByUser, id, time, fes_starting_values=[missing], ses_starting_values=[missing], share_degree=3, lm_tfp_degree=3, int_const_series_degree=3, opts=Dict())
+
+Run both estimation stages on `data` in-place, without standard errors. Used by
+`gnrprodest!` for the point estimates and by `gnrbootstrapping` for each repetition.
+
+The return value depends on `opts["called_from_bootstrapping"]`: normally the two result
+dictionaries, but during bootstrapping a plain vector holding the mean output elasticities
+followed by the parameters of the law of motion of ω, which is what the bootstrap needs.
+
+# Keyword Arguments
+See `gnrprodest`, except that standard error options are absent.
+
+# Returns
+- `Tuple` or `Vector`: `(fes_returns, ses_returns)`, or the vector of statistics described above
+"""
 function gnr_estimation!(;data::DataFrame, 
                          output::Symbol, 
                          flexible_input::Symbol, 
@@ -124,6 +197,28 @@ function gnr_estimation!(;data::DataFrame,
 end
 
 ## First stage function
+"""
+    gnrfirststage!(; data, output, flexible_input, fixed_inputs, ln_share_flex_y, share_degree=3, starting_values=[missing], opts=Dict()) -> Dict
+
+Estimate the first stage (the share regression) in-place. Regresses the flexible input
+share of output on a polynomial series in all inputs, which identifies the output
+elasticity of the flexible input, and adds the fitted quantities to `data`.
+
+# Keyword Arguments
+- `data::DataFrame`: Data frame to mutate
+- `output::Symbol`: Log output variable
+- `flexible_input::Union{Symbol,Array{Symbol}}`: Log flexible input variable
+- `fixed_inputs::Union{Symbol,Array{Symbol}}`: Log fixed input variable(s)
+- `ln_share_flex_y::Symbol`: Log flexible input share of output
+- `share_degree::Int=3`: Degree of the polynomial series in the share regression
+- `starting_values::Vector=[missing]`: Starting values for the NLLS regression
+- `opts::Dict=Dict()`: Further options, see `opts_filler`
+
+# Returns
+- `Dict`: First stage results, holding the corrected and uncorrected coefficients (`γ`,
+  `γ_dash`), the coefficients of the integrated series (`γ_flex`), the constant `E`, the
+  polynomial series names, and the optimizer output
+"""
 function gnrfirststage!(;data::DataFrame, output::Symbol, flexible_input::Union{Symbol,Array{Symbol}}, fixed_inputs::Union{Symbol,Array{Symbol}}, ln_share_flex_y::Symbol, share_degree::Int = 3, starting_values::Vector = [missing], opts::Dict=Dict())
 
     # Clean inputs to make them comform with the rest of the program
@@ -174,6 +269,19 @@ function gnrfirststage!(;data::DataFrame, output::Symbol, flexible_input::Union{
 end
 
 ## First stage estimation function that does not modify inputs (wrapper that copies inputs before passing it on)
+"""
+    gnrfirststage(; data, output, flexible_input, fixed_inputs, ln_share_flex_y, share_degree=3, starting_values=[missing], opts=Dict()) -> Tuple
+
+Non-mutating version of `gnrfirststage!`. Copies `data` before estimating, so the caller's
+data frame is left untouched.
+
+# Keyword Arguments
+See `gnrfirststage!`.
+
+# Returns
+- `Tuple`: `(return_elements, data)`, the first stage results and the copy of the data that
+  carries the generated columns. The copy is what the second stage expects as input
+"""
 function gnrfirststage(;data::DataFrame, output::Symbol, flexible_input::Union{Symbol,Array{Symbol}}, fixed_inputs::Union{Symbol,Array{Symbol}}, ln_share_flex_y::Symbol, share_degree::Int = 3, starting_values::Vector = [missing], opts::Dict=Dict())
 
     # Copy data s.t. the program does not modify existing data
@@ -194,6 +302,26 @@ function gnrfirststage(;data::DataFrame, output::Symbol, flexible_input::Union{S
 end
 
 ## First stage estimation function
+"""
+    fes_est(; data, ln_share_flex_y, input_var_symbols, method, starting_values, opts) -> Tuple
+
+Estimate the share regression coefficients. With `method = "NLLS"` the log of the
+polynomial series is fitted to the log share by non-linear least squares, as in the GNR
+replication code. With `method = "OLS"` the exponentiated share is regressed on the series,
+which has a closed form solution and is faster and more robust.
+
+# Keyword Arguments
+- `data::DataFrame`: Dataset
+- `ln_share_flex_y::Symbol`: Log flexible input share of output
+- `input_var_symbols::Array{Symbol}`: Polynomial series names
+- `method::String`: `"NLLS"` or `"OLS"`
+- `starting_values::Vector`: Starting values for the NLLS regression
+- `opts::Dict`: Further options, including the optimizer and its settings
+
+# Returns
+- `Tuple`: `(coefficients, optimizer_output)`. The second element is empty for `"OLS"`,
+  which has no optimizer output
+"""
 function fes_est(; data::DataFrame, ln_share_flex_y::Symbol, input_var_symbols::Array{Symbol}, method::String, starting_values::Vector, opts::Dict)
 
     if method == "OLS" # The GNR replication code uses a non-linear regression of the shares onto the natural logarithm of the polynomials for the first stage. However, this seems unnecessary. I cannot see any reason not to simply take the exponential of the shares onto the polynomials. This is a linear regression estimated by OLS. It is much faster to calculate and much more robust because it is not a numerical optimization but has a simple analytical solution.
@@ -240,6 +368,22 @@ function fes_est(; data::DataFrame, ln_share_flex_y::Symbol, input_var_symbols::
 end
 
 ## Nonlinear least squares criterion function for the first stage
+"""
+    NLLS_criterion!(γ, Y, X, c) -> Number
+
+Criterion of the first stage non-linear least squares regression, the sum of squared
+deviations between the log share and the log of the fitted polynomial series. Writes into
+the preallocated cache `c` to avoid allocations during the optimization.
+
+# Arguments
+- `γ`: Coefficient vector
+- `Y`: Log flexible input share of output
+- `X`: Polynomial series, including the constant
+- `c::NamedTuple`: Preallocated cache
+
+# Returns
+- `Number`: Criterion value
+"""
 function NLLS_criterion!(γ, Y, X, c)
 
     mul!(c.cache1,X,γ)
@@ -249,6 +393,26 @@ function NLLS_criterion!(γ, Y, X, c)
 end
 
 ## Function to calculate quantities in the first stage (after estimation)
+"""
+    fes_predictions!(; data, ln_share_flex_y, flexible_input, input_var_symbols, γ_dash, output) -> Tuple
+
+Compute the first stage quantities from the estimated coefficients and add them to `data`
+in-place. Recovers the first stage residual `ϵ`, the constant `E = E[exp(ϵ)]` used to
+correct the coefficients, the output elasticity of the flexible input, the integral of the
+share over the flexible input, and `mathcal_Y`, which the second stage takes as its
+dependent variable.
+
+# Keyword Arguments
+- `data::DataFrame`: Data frame to mutate
+- `ln_share_flex_y::Symbol`: Log flexible input share of output
+- `flexible_input::Symbol`: Log flexible input variable
+- `input_var_symbols::Vector{Symbol}`: Polynomial series names
+- `γ_dash::Vector{<:Number}`: Uncorrected share regression coefficients
+- `output`: Log output variable
+
+# Returns
+- `Tuple`: `(fes_res_df, E)`, a data frame of the coefficients and the constant `E`
+"""
 function fes_predictions!(;data::DataFrame, ln_share_flex_y::Symbol, flexible_input::Symbol, input_var_symbols::Vector{Symbol}, γ_dash::Vector{<:Number}, output) # input_var_symbols must be a Vector (not a general Array): get_input_degree below only accepts a Vector
     
     flex_elas_sym = Symbol(flexible_input, "_elas")
@@ -291,6 +455,15 @@ function fes_predictions!(;data::DataFrame, ln_share_flex_y::Symbol, flexible_in
 end
 
 ## Function to print first stage results
+"""
+    fes_print_res(fes_res::DataFrame, opts::Dict)
+
+Print the first stage coefficients, corrected and uncorrected. Returns `nothing`.
+
+# Arguments
+- `fes_res::DataFrame`: First stage coefficients as returned by `fes_predictions!`
+- `opts::Dict`: Further options
+"""
 function fes_print_res(fes_res::DataFrame, opts::Dict)
     # Print results if user wants that
     print_tab = hcat(fes_res.Variable, fes_res.γ, fes_res.γ_dash)
@@ -303,6 +476,31 @@ function fes_print_res(fes_res::DataFrame, opts::Dict)
 end
 
 ## Second stage estimation function
+"""
+    gnrsecondstage!(; data, flexible_input, fixed_inputs, id, time, fes_returns, mathcal_Y_var=:mathcal_Y, int_const_series_degree=3, lm_tfp_degree=3, called_from_GNRProd=false, starting_values=[missing], opts=Dict()) -> Dict
+
+Estimate the second stage in-place. Recovers the constant of integration by GMM, using
+lagged fixed inputs as instruments, which identifies the output elasticities of the fixed
+inputs and separates persistent productivity from the first stage residual.
+
+# Keyword Arguments
+- `data::DataFrame`: Data frame to mutate, must carry the first stage output
+- `flexible_input::Symbol`: Log flexible input variable
+- `fixed_inputs::Union{Array{Symbol},Symbol}`: Log fixed input variable(s)
+- `id::Symbol`: Firm identifier
+- `time::Symbol`: Time identifier
+- `fes_returns::Dict`: First stage results
+- `mathcal_Y_var::Symbol=:mathcal_Y`: Dependent variable generated by the first stage
+- `int_const_series_degree::Int=3`: Degree of the polynomial series of the constant of integration
+- `lm_tfp_degree::Int=3`: Degree of the polynomial in the law of motion of ω
+- `called_from_GNRProd::Bool=false`: If `true`, reuse the first stage polynomials instead of generating new ones
+- `starting_values::Vector=[missing]`: Starting values for the GMM estimation
+- `opts::Dict=Dict()`: Further options, see `opts_filler`
+
+# Returns
+- `Dict`: Second stage results, holding the coefficients of the constant of integration (`α`),
+  the parameters of the law of motion of ω (`δ`), and the optimizer output
+"""
 function gnrsecondstage!(;data::DataFrame, flexible_input::Symbol, fixed_inputs::Union{Array{Symbol},Symbol}, id::Symbol, time::Symbol, fes_returns::Dict, mathcal_Y_var::Symbol = :mathcal_Y, int_const_series_degree::Int = 3, lm_tfp_degree::Int = 3, called_from_GNRProd::Bool = false, starting_values::Vector = [missing], opts::Dict= Dict())
     
     # Clean inputs to be of the correct types
@@ -362,6 +560,19 @@ function gnrsecondstage!(;data::DataFrame, flexible_input::Symbol, fixed_inputs:
 end
 
 ## Second stage estimation function that does not modify inputs (wrapper that copies inputs before passing it on)
+"""
+    gnrsecondstage(; data, flexible_input, fixed_inputs, id, time, fes_returns, mathcal_Y_var=:mathcal_Y, int_const_series_degree=3, lm_tfp_degree=3, called_from_GNRProd=false, starting_values=[missing], opts=Dict()) -> Tuple
+
+Non-mutating version of `gnrsecondstage!`. Copies `data` before estimating, so the caller's
+data frame is left untouched.
+
+# Keyword Arguments
+See `gnrsecondstage!`.
+
+# Returns
+- `Tuple`: `(ses_quant_res, data_df)`, the second stage results and the copy of the data that
+  carries the elasticities and productivity
+"""
 function gnrsecondstage(;data::DataFrame, flexible_input::Symbol, fixed_inputs::Union{Array{Symbol},Symbol}, id::Symbol, time::Symbol, fes_returns::Dict, mathcal_Y_var::Symbol = :mathcal_Y, int_const_series_degree::Int = 3, lm_tfp_degree::Int = 3, called_from_GNRProd::Bool = false, starting_values::Vector = [missing], opts::Dict= Dict())
 
    # Copy data s.t. the program does not modify existing data
@@ -386,6 +597,24 @@ function gnrsecondstage(;data::DataFrame, flexible_input::Symbol, fixed_inputs::
 end
 
 ## Second stage estimation function
+"""
+    ses_est(; data, fixed_poly, starting_values, mathcal_Y_var, lm_tfp_degree=3, opts) -> Tuple
+
+Run the second stage GMM estimation and then the law of motion of productivity. Minimizes
+`ses_gmm!` over the coefficients of the constant of integration, then regresses ω on a
+polynomial in its own lag at the minimizer. Throws if the optimizer does not converge.
+
+# Keyword Arguments
+- `data::DataFrame`: Dataset, must carry the lagged variables
+- `fixed_poly::Vector{Symbol}`: Polynomial series of the fixed inputs
+- `starting_values::Vector`: Starting values for the GMM estimation
+- `mathcal_Y_var::Symbol`: Dependent variable generated by the first stage
+- `lm_tfp_degree::Int=3`: Degree of the polynomial in the law of motion of ω
+- `opts::Dict`: Further options, including the optimizer and its settings
+
+# Returns
+- `Tuple`: `(gmm_res, δ)`, the optimizer output and the parameters of the law of motion of ω
+"""
 function ses_est(;data::DataFrame, fixed_poly::Vector{Symbol}, starting_values::Vector, mathcal_Y_var::Symbol, lm_tfp_degree::Int = 3, opts::Dict)
 
     ## Run GMM estimation
@@ -444,6 +673,27 @@ function ses_est(;data::DataFrame, fixed_poly::Vector{Symbol}, starting_values::
 end
 
 ## GMM criterion function
+"""
+    ses_gmm!(; α, mathcal_Y_vec, lag_mathcal_Y_vec, fixed_poly_mat, fixed_poly_lag_mat, lm_tfp_degree, c) -> Number
+
+GMM criterion of the second stage. For a candidate `α` it forms productivity ω, projects it
+on a polynomial in its lag, and returns the inner product of the resulting moment vector
+with itself. The moments are the innovation to ω interacted with the lagged fixed input
+polynomials. Writes into the preallocated cache `c` to avoid allocations during the
+optimization.
+
+# Keyword Arguments
+- `α::Array{<:Number}`: Candidate coefficients of the constant of integration
+- `mathcal_Y_vec::Vector{<:Number}`: Dependent variable generated by the first stage
+- `lag_mathcal_Y_vec::Vector{<:Number}`: Its lag
+- `fixed_poly_mat::Array{<:Number}`: Polynomial series of the fixed inputs
+- `fixed_poly_lag_mat::Array{<:Number}`: Its lag, which supplies the instruments
+- `lm_tfp_degree::Int`: Degree of the polynomial in the law of motion of ω
+- `c::NamedTuple`: Preallocated cache
+
+# Returns
+- `Number`: Criterion value
+"""
 function ses_gmm!(;α::Array{<:Number},
                    mathcal_Y_vec::Vector{<:Number},
                    lag_mathcal_Y_vec::Vector{<:Number}, 
@@ -479,6 +729,26 @@ function ses_gmm!(;α::Array{<:Number},
 end
 
 ## Function to calculate some quantities with results from second stage GMM estimation
+"""
+    ses_predictions!(; data, mathcal_Y_var, flexible_input, fixed_inputs, fixed_poly, α, fes_returns) -> Matrix
+
+Compute the second stage quantities from the estimated coefficients and add them to `data`
+in-place. Recovers persistent productivity `ω` and its level `Ω`, total productivity
+`v = ω + ϵ`, and the output elasticity of each fixed input, which is the sum of the
+derivative of the constant of integration and the derivative of the integrated share.
+
+# Keyword Arguments
+- `data::DataFrame`: Data frame to mutate
+- `mathcal_Y_var::Symbol`: Dependent variable generated by the first stage
+- `flexible_input::Symbol`: Log flexible input variable
+- `fixed_inputs::Union{Symbol,Vector{Symbol}}`: Log fixed input variable(s)
+- `fixed_poly::Vector{Symbol}`: Polynomial series of the fixed inputs
+- `α::Vector{<:Number}`: Coefficients of the constant of integration
+- `fes_returns::Dict`: First stage results
+
+# Returns
+- `Matrix`: Output elasticities of the fixed inputs, one column per input
+"""
 function ses_predictions!(;data::DataFrame, mathcal_Y_var::Symbol, flexible_input::Symbol, fixed_inputs::Union{Symbol,Vector{Symbol}}, fixed_poly::Vector{Symbol}, α::Vector{<:Number}, fes_returns::Dict )
 
     # log(TFP) and TFP
@@ -597,6 +867,22 @@ function ses_predictions!(;data::DataFrame, mathcal_Y_var::Symbol, flexible_inpu
 end
 
 ## Function printing results of the second stage
+"""
+    ses_print_res(; data, all_inputs, fixed_poly, δ, α, lm_tfp_degree, opts)
+
+Print the second stage results: the coefficients of the constant of integration, summary
+statistics of every output elasticity, summary statistics of productivity, and the
+parameters of the law of motion of ω. Returns `nothing`.
+
+# Keyword Arguments
+- `data::DataFrame`: Dataset carrying the elasticities and productivity
+- `all_inputs::Array{Symbol}`: All input variables, fixed and flexible
+- `fixed_poly`: Polynomial series of the fixed inputs
+- `δ`: Parameters of the law of motion of ω
+- `α`: Coefficients of the constant of integration
+- `lm_tfp_degree`: Degree of the polynomial in the law of motion of ω
+- `opts::Dict`: Further options
+"""
 function ses_print_res(; data::DataFrame, all_inputs::Array{Symbol}, fixed_poly, δ, α, lm_tfp_degree, opts::Dict)
     
     desc_table = Array{Union{Symbol,Float64}}(undef, length(all_inputs), 5)
@@ -654,6 +940,30 @@ function ses_print_res(; data::DataFrame, all_inputs::Array{Symbol}, fixed_poly,
 end
 
 ## Function calculating some SE related statistics
+"""
+    gnr_SE_stats(; data, output, flexible_input, fixed_inputs, ln_share_flex_y=:NotDefinedByUser, id, time, fes_starting_values=[missing], ses_starting_values=[missing], share_degree=3, lm_tfp_degree=3, int_const_series_degree=3, boot_reps=200, point_est, opts) -> DataFrame
+
+Compute inference statistics for the point estimates. Bootstraps the estimation, takes the
+variance of the repetitions as the sampling variance, and derives standard errors,
+t-statistics, p-values and 95% confidence intervals from the normal distribution, following
+Cameron and Trivedi (2005, ch. 11).
+
+The order of `point_est` is the mean elasticities of the fixed inputs, then the flexible
+input, then the parameters of the law of motion of ω, and the rows of the returned table
+follow the same order.
+
+# Keyword Arguments
+- `data::DataFrame`: Dataset to resample from
+- `point_est::Vector{<:Number}`: Point estimates the statistics refer to
+- `boot_reps::Int=200`: Number of bootstrap repetitions
+- `opts::Dict`: Further options
+
+Remaining keyword arguments are as in `gnrprodest` and are passed on to each repetition.
+
+# Returns
+- `DataFrame`: One row per estimate, with the point estimate, standard error, t-statistic,
+  p-value and confidence bounds
+"""
 function gnr_SE_stats(;data::DataFrame, 
                        output::Symbol, 
                        flexible_input::Symbol, 
@@ -716,6 +1026,28 @@ function gnr_SE_stats(;data::DataFrame,
 end
 
 ## Bootstrapping
+"""
+    gnrbootstrapping(; data, output, flexible_input, fixed_inputs, ln_share_flex_y=:NotDefinedByUser, id, time, fes_starting_values=[missing], ses_starting_values=[missing], share_degree=3, lm_tfp_degree=3, int_const_series_degree=3, boot_reps=200, opts) -> Matrix
+
+Run the bootstrap. Draws `boot_reps` samples of firms with replacement and re-estimates
+both stages on each, returning one row of statistics per repetition. A repetition whose
+estimation fails is redrawn up to `opts["maxboottries"]` times before an error is thrown.
+
+The repetitions are distributed over Julia's threads, so starting Julia with several
+threads speeds this up considerably. It is by far the slowest part of the estimation
+because every repetition re-estimates the whole model.
+
+# Keyword Arguments
+- `data::DataFrame`: Dataset to resample from
+- `boot_reps::Int=200`: Number of bootstrap repetitions
+- `opts::Dict`: Further options, including `maxboottries`
+
+Remaining keyword arguments are as in `gnrprodest` and are passed on to each repetition.
+
+# Returns
+- `Matrix`: `boot_reps` rows, each holding the mean output elasticities followed by the
+  parameters of the law of motion of ω
+"""
 function gnrbootstrapping(;data::DataFrame, 
                            output::Symbol, 
                            flexible_input::Symbol, 
@@ -786,6 +1118,20 @@ function gnrbootstrapping(;data::DataFrame,
 end
 
 ## Function drawing a sample of firms
+"""
+    draw_sample(; data, id) -> DataFrame
+
+Draw bootstrap sample of firms from panel data. Samples as many firms as the panel contains,
+with replacement, and assigns unique IDs to resampled firms to avoid duplicate ID issues in
+subsequent panel operations.
+
+# Keyword Arguments
+- `data::DataFrame`: Panel dataset to sample from
+- `id::Symbol`: Firm identifier column
+
+# Returns
+- `DataFrame`: All observations of the drawn firms, with an additional `unique_id` column
+"""
 function draw_sample(;data::DataFrame, id::Symbol)
 
     id_list = unique(data[!, id])
@@ -804,6 +1150,16 @@ function draw_sample(;data::DataFrame, id::Symbol)
 end
 
 ## Function to print results after all estimations are done
+"""
+    print_all_res(data::DataFrame, all_res_tab::DataFrame)
+
+Print the number of observations and the final table of estimates with their standard
+errors and inference statistics. Returns `nothing`.
+
+# Arguments
+- `data::DataFrame`: Estimation sample, used for the observation count
+- `all_res_tab::DataFrame`: Table of estimates as returned by `gnr_SE_stats`
+"""
 function print_all_res(data::DataFrame, all_res_tab::DataFrame)
         println()
         println("Number of observations: "*string(size(data)[1]))
