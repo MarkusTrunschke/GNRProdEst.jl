@@ -47,11 +47,16 @@ end
 
     gnr_ses_res = ReplicationResults.gnr_ses_res
 
-    @test round.(gnr_ses_res["α"], digits = 5) == [0.38825, -0.02485, 0.00247]
+    # Compared with an absolute tolerance rather than for equality. The second stage GMM
+    # criterion is ill conditioned: NelderMead stops before solving the moment conditions, and
+    # where it stops depends on floating point details, so the estimates differ across
+    # platforms. macOS/ARM gives α = [0.38825, -0.02485, 0.00247] and Linux/x64 gives
+    # [0.38686, -0.02449, 0.00244], which is also what the pre-1.2 reference values recorded.
+    # The tolerances below cover that spread. A relative tolerance is not usable here: α[2] and
+    # α[3] differ by more than 1% between platforms while being tiny in absolute terms.
+    @test isapprox(gnr_ses_res["α"], [0.3875, -0.0247, 0.00246], atol = 2e-3)
 
-    # 4 digits: δ[4] differs in the 5th digit between a plain run and one under
-    # --check-bounds=yes (which is what Pkg.test uses)
-    @test round.(vec(gnr_ses_res["δ"]), digits = 4) == [0.168, 0.7691, 0.0654, -0.0398]
+    @test isapprox(vec(gnr_ses_res["δ"]), [0.1682, 0.769, 0.0656, -0.03985], atol = 1e-3)
 
     @test Optim.converged(gnr_ses_res["gmm_optim_results"])
 end
