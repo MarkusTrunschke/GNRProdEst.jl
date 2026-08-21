@@ -484,7 +484,7 @@ function ses_predictions!(;data::DataFrame, mathcal_Y_var::Symbol, flexible_inpu
     # log(TFP) and TFP
     data.ω = data[!, mathcal_Y_var] .- Array(data[!, fixed_poly])*α
     data.Ω = exp.(data.ω)
-    data.v = data.ω .* data.ϵ # ϵ = residulas from first stage
+    data.v = data.ω .+ data.ϵ # Total productivity ν = ω + ϵ (GNR 2020, p. 2977). ϵ = residuals from first stage
 
 
     ## Fixed input elasticity
