@@ -17,12 +17,12 @@ converts integer starting values to floats because the optimizers reject integer
 """
 function GNR_input_cleaner!(;fixed_inputs::Union{Array{Symbol},Symbol}, flexible_input::Union{Array{Symbol},Symbol}, fes_starting_values::Union{Vector{<:Number},Vector{Missing}} = vec([missing]), ses_starting_values::Union{Vector{<:Number},Vector{Missing}} = vec([missing]))
     # Convert fixed input into vector of symbols if an array was given
-    if typeof(fixed_inputs) == Array || typeof(fixed_inputs) == Matrix{Symbol}
+    if fixed_inputs isa AbstractArray # isa rather than typeof(...) == Array: typeof returns a concrete type, so the old test was never true and only Matrix{Symbol} was flattened. It also keeps vec, which has no method for a Symbol, provably reachable only for arrays
         fixed_inputs = vec(fixed_inputs)
     end
 
     # Convert fixed input to a vector if user put in a symbol. (Makes working with it in the program easier) 
-    if typeof(fixed_inputs) == Symbol
+    if fixed_inputs isa Symbol
         fixed_inputs = [fixed_inputs]
     end
     
@@ -367,21 +367,21 @@ components of a polynomial are separated by `⋅`.
 """
 function get_input_degree(input::Union{Symbol,Vector{Symbol}}, all_var_symbols::Union{Symbol,Vector{Symbol}})
     
-    # Clean inputs
-    if typeof(input) == Symbol
-        input = [input]
-    end
+    # Clean inputs. The annotated locals keep the types provable for the length calls below,
+    # neither of which has a method for a lone Symbol
+    input_vec::Vector{Symbol} = input isa Symbol ? [input] : input
+    all_vars::Vector{Symbol} = all_var_symbols isa Symbol ? [all_var_symbols] : all_var_symbols
 
     # Initalize array
-    input_degree_mat = Array{Union{Symbol,<:Number}}(undef, length(input) + 1, length(all_var_symbols))# Array{Union{Symbol,Int}}[]
+    input_degree_mat = Array{Union{Symbol,<:Number}}(undef, length(input_vec) + 1, length(all_vars))# Array{Union{Symbol,Int}}[]
     
     # Give first row all variable symbols
-    input_degree_mat[1,:] = all_var_symbols
+    input_degree_mat[1,:] = all_vars
 
     i = 2
-    for inp in input # Loop over all inputs
+    for inp in input_vec # Loop over all inputs
         j = 1
-        for sym in all_var_symbols # Iterate over all symbols of the polynomials
+        for sym in all_vars # Iterate over all symbols of the polynomials
             parts = split(string(sym), '⋅')
             count_input = count(isequal(string(inp)), parts) # Check for each part if it matches the flexible input symbol and count the occurances
             input_degree_mat[i,j] = count_input
@@ -406,7 +406,7 @@ corrected upwards so that the fitted values entering the logarithm are positive.
 # Keyword Arguments
 - `data::DataFrame`: Dataset
 - `Y_var::Symbol`: Dependent variable of the auxiliary regression
-- `X_vars::Union{Symbol,Array{Symbol}}`: Independent variables of the auxiliary regression
+- `X_vars::Vector{Symbol}`: Independent variables of the auxiliary regression
 - `user_start_vals::Vector{<:Union{Missing, Number}}`: User-supplied starting values, or `[missing]`
 - `stage::String`: `"first stage"` or `"second stage"`
 - `opts::Dict`: Further options, used to decide whether to print the values
@@ -414,12 +414,12 @@ corrected upwards so that the fitted values entering the logarithm are positive.
 # Returns
 - `Vector`: Starting values, including the constant
 """
-function startvalues(;data::DataFrame, Y_var::Symbol, X_vars::Union{Symbol,Array{Symbol}}, user_start_vals::Vector{<:Union{Missing, Number}}, stage::String, opts::Dict)
+function startvalues(;data::DataFrame, Y_var::Symbol, X_vars::Vector{Symbol}, user_start_vals::Vector{<:Union{Missing, Number}}, stage::String, opts::Dict)
     # Check if user-provided starting values are in the right form
     if !(all(ismissing.(user_start_vals)) && length(user_start_vals) == 1)
         # If user-provided not the right number of starting values
-        if length(user_start_vals) != length(X_vars)
-            throw(uppercasefirst(stage)*" starting values: You did not provide the correct number of starting values. They need to match the number of terms in the polynomial series. You can also leave them unspecified to let the program choose starting values.")
+        if length(user_start_vals) != length(X_vars) + 1 # + 1 for the constant. Without it this check and the one further down contradict each other, so no number of starting values could ever pass both
+            throw(uppercasefirst(stage)*" starting values: You did not provide the correct number of starting values. They need to match the number of terms in the polynomial series plus one for the constant. You can also leave them unspecified to let the program choose starting values.")
         end
     end
 
@@ -438,9 +438,9 @@ function startvalues(;data::DataFrame, Y_var::Symbol, X_vars::Union{Symbol,Array
     else # If user specified starting starting_values
 
         # Check dimensions and throw an error if they do not match
-        if size(X_vars)[1] + 1 != size(user_start_vals)[1] # Add constant
-            println(size(X_vars))
-            println(size(user_start_vals))
+        if length(X_vars) + 1 != length(user_start_vals) # Add constant
+            println(length(X_vars))
+            println(length(user_start_vals))
             throw("You specified either too many or not enough "*stage*" starting values!")
 
         else
