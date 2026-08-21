@@ -1071,7 +1071,7 @@ function gnrbootstrapping(;data::DataFrame,
     opts["called_from_bootstrapping"] = true
 
     # Run bootstrap loop
-    # Threads.@threads for rep = 1:boot_reps
+    p = Progress(boot_reps; dt=0.5, barglyphs=BarGlyphs("[=> ]"), barlen=50, color=:white)
     Threads.@threads for rep = 1:boot_reps
         successfull_rep_flag = false # Define exit flag
         ntry = 1 # Counts iterations of the same bootstrap repetition (increases if estimation fails). Must live outside the while loop, otherwise it is reset on every iteration, the ntry < maxboottries guard below never trips, and a repeatedly failing repetition retries forever instead of erroring out
@@ -1105,11 +1105,12 @@ function gnrbootstrapping(;data::DataFrame,
                 end
             end
 
-            # Print status and change exit flag
-            print(".")
+            # Report progress and change exit flag
+            next!(p)
             successfull_rep_flag = true
         end
     end
+    finish!(p)
 
     # Delete internal option
     opts = delete!(opts,"called_from_bootstrapping")
