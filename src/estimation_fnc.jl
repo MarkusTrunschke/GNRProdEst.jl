@@ -735,11 +735,10 @@ function gnrbootstrapping(;data::DataFrame,
     # Run bootstrap loop
     # Threads.@threads for rep = 1:boot_reps
     Threads.@threads for rep = 1:boot_reps
-            successfull_rep_flag = false
-        while successfull_rep_flag == false
+        successfull_rep_flag = false # Define exit flag
+        ntry = 1 # Counts iterations of the same bootstrap repetition (increases if estimation fails). Must live outside the while loop, otherwise it is reset on every iteration, the ntry < maxboottries guard below never trips, and a repeatedly failing repetition retries forever instead of erroring out
 
-            ntry = 1 # Counts iterations of the same bootstrap repetition (increases if estimation fails)
-            successfull_rep_flag = false # Define exit flag
+        while successfull_rep_flag == false
 
             # Draw bootstrap sample
             boot_data = draw_sample(data = data, id = id)
