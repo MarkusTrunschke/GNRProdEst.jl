@@ -11,8 +11,8 @@
     # The reference values asserted below were produced with these GMM tolerances, so this
     # dict has to stay as it is. Printing is disabled: no test inspects the printed tables and
     # it only slows the suite down.
-    opts = Dict("ses_optimizer_options" => Optim.Options(f_tol = 1e-12,
-                                                         x_tol = 1e-12,
+    opts = Dict("ses_optimizer_options" => Optim.Options(f_reltol = 1e-12,
+                                                         x_abstol = 1e-12,
                                                          g_tol = 1e-12),
                 "fes_print_starting_values" => false,
                 "ses_print_starting_values" => false,

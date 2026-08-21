@@ -163,8 +163,8 @@ function opts_filler(opts::Dict)
     end
     if "fes_optimizer_options" ∉ keys(new_opts)
         new_opts["fes_optimizer_options"] = Optim.Options(iterations = 20000,
-                                                      f_tol = 1e-9,
-                                                      x_tol = 1e-12,
+                                                      f_reltol = 1e-9, # Was f_tol, deprecated by Optim in favour of f_reltol / f_abstol. Optim mapped f_tol onto f_reltol with the same value, so behaviour is unchanged
+                                                      x_abstol = 1e-12, # Was x_tol, deprecated by Optim in favour of x_abstol / x_reltol. Optim mapped x_tol onto x_abstol with the same value, so behaviour is unchanged
                                                       g_tol = 1e-13, # √(Σ(yᵢ-ȳ)²)/n ≤ 1.0e-13 (only sets g_abstol, not outer_g_abstol)
                                                       allow_f_increases = true,
                                                       show_trace = false,
@@ -181,8 +181,8 @@ function opts_filler(opts::Dict)
     end
     if "ses_optimizer_options" ∉ keys(new_opts)
         new_opts["ses_optimizer_options"] = Optim.Options(iterations = 20000,
-                                                      f_tol = 1e-9,
-                                                      x_tol = 1e-12,
+                                                      f_reltol = 1e-9, # Was f_tol, deprecated by Optim in favour of f_reltol / f_abstol. Optim mapped f_tol onto f_reltol with the same value, so behaviour is unchanged
+                                                      x_abstol = 1e-12, # Was x_tol, deprecated by Optim in favour of x_abstol / x_reltol. Optim mapped x_tol onto x_abstol with the same value, so behaviour is unchanged
                                                       g_tol = 1e-13, # √(Σ(yᵢ-ȳ)²)/n ≤ 1.0e-13 (only sets g_abstol, not outer_g_abstol)
                                                       allow_f_increases = true,
                                                       show_trace = false,
