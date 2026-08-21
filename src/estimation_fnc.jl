@@ -249,12 +249,12 @@ function NLLS_criterion!(γ, Y, X, c)
 end
 
 ## Function to calculate quantities in the first stage (after estimation)
-function fes_predictions!(;data::DataFrame, ln_share_flex_y::Symbol, flexible_input::Symbol, input_var_symbols::Array{Symbol}, γ_dash::Vector{<:Number}, output)
+function fes_predictions!(;data::DataFrame, ln_share_flex_y::Symbol, flexible_input::Symbol, input_var_symbols::Vector{Symbol}, γ_dash::Vector{<:Number}, output) # input_var_symbols must be a Vector (not a general Array): get_input_degree below only accepts a Vector
     
     flex_elas_sym = Symbol(flexible_input, "_elas")
     
     # Define matrices for OLS
-    X_symbols = vcat(:constant, input_var_symbols)
+    X_symbols::Vector{Symbol} = vcat(:constant, input_var_symbols) # Annotated so the type is statically provable: vcat of a Symbol with a Vector{Symbol} is not resolved by every static analyser
     X = Matrix(data[!, X_symbols]) # hcat(data.constant, Matrix(data[:,input_var_symbols]))
 
     ## Calculate flexible input elasticity
@@ -490,8 +490,11 @@ function ses_predictions!(;data::DataFrame, mathcal_Y_var::Symbol, flexible_inpu
     ## Fixed input elasticity
     # First part: ∂C(fixed_inputs)/∂fixed_inputs
     # 1. Match all polynomial series variables to one lower polynomial
-    all_inputs = fes_returns["all_inputs"]
-    fes_series_degree = get_input_degree(all_inputs, fes_returns["polynom_series"]) # Degree of input in polynomial series
+    # Annotated because values pulled out of a Dict arrive as Any, which hides them from
+    # get_input_degree's Union{Symbol,Vector{Symbol}} signature
+    all_inputs::Vector{Symbol} = fes_returns["all_inputs"]
+    polynom_series::Vector{Symbol} = fes_returns["polynom_series"]
+    fes_series_degree = get_input_degree(all_inputs, polynom_series) # Degree of input in polynomial series
     ses_series_degree = get_input_degree(all_inputs, fixed_poly) # Degree of input in polynomial series
 
     # Preallocate output matrix
@@ -523,11 +526,11 @@ function ses_predictions!(;data::DataFrame, mathcal_Y_var::Symbol, flexible_inpu
         
         # Select columns from data that correspond to the correct polynomials. If match_arr == 0, there needs to be a constant.
         deriv_C = Array{Float64}(undef, size(data[!, mathcal_Y_var])[1], size(match_arr)[2])
-        for col in 1:size(match_arr,2)
+        for col in axes(match_arr, 2)
             if match_arr[2,col] == 0
                 deriv_C[:,col] .= 1
             else
-                # deriv_C[:,col] .= data[!,fes_returns["polynom_series"][match_arr[2,col]]]
+                # deriv_C[:,col] .= data[!,polynom_series[match_arr[2,col]]]
                 deriv_C[:,col] .= data[!,fixed_poly[match_arr[2,col]]]
             end
         end
@@ -565,11 +568,11 @@ function ses_predictions!(;data::DataFrame, mathcal_Y_var::Symbol, flexible_inpu
 
         # Select columns from data that correspond to the correct polynomials. If match_arr == 0, there needs to be a constant.
         deriv_noC = Array{Float64}(undef, size(data[!, mathcal_Y_var])[1], size(match_arr)[2])
-        for col in 1:size(match_arr,2)
+        for col in axes(match_arr, 2)
             if match_arr[2,col] == 0
                 deriv_noC[:,col] .= 0
             else
-                deriv_noC[:,col] .= data[!,fes_returns["polynom_series"][match_arr[2,col]]]
+                deriv_noC[:,col] .= data[!,polynom_series[match_arr[2,col]]]
             end
         end
 
@@ -654,7 +657,7 @@ end
 function gnr_SE_stats(;data::DataFrame, 
                        output::Symbol, 
                        flexible_input::Symbol, 
-                       fixed_inputs::Union{Symbol,Array{Symbol}}, 
+                       fixed_inputs::Vector{Symbol}, 
                        ln_share_flex_y::Symbol = :NotDefinedByUser, 
                        id::Symbol, 
                        time::Symbol,
@@ -716,7 +719,7 @@ end
 function gnrbootstrapping(;data::DataFrame, 
                            output::Symbol, 
                            flexible_input::Symbol, 
-                           fixed_inputs::Union{Symbol,Array{Symbol}}, 
+                           fixed_inputs::Vector{Symbol}, 
                            ln_share_flex_y::Symbol = :NotDefinedByUser, 
                            id::Symbol, 
                            time::Symbol,
