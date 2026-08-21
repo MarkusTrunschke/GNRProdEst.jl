@@ -4,12 +4,10 @@ using GNRProdEst, DataFrames, CSV, Test, Optim
 
 @testset "GNRProdEst.jl" begin
 
-    # Read in replication data
-    if last(pwd(), 4) == "test"
-        rep_data = CSV.read(joinpath(pwd(),"GNR_data_500.csv"), DataFrame)
-    elseif last(pwd(), 12) == "NRProdEst.jl"
-        rep_data = CSV.read(joinpath(pwd(),"test","GNR_data_500.csv"), DataFrame)
-    end
+    # Read in replication data. @__DIR__ is this file's directory, so the data is found no
+    # matter what the working directory is. Guessing from pwd() only worked under Pkg.test
+    # (which cds into test/) and left rep_data undefined when run from the package root.
+    rep_data = CSV.read(joinpath(@__DIR__, "GNR_data_500.csv"), DataFrame)
 
     # Define some options to print results
     opts = Dict("ses_optimizer_options" => Optim.Options(f_tol = 1e-12,
@@ -31,13 +29,13 @@ using GNRProdEst, DataFrames, CSV, Test, Optim
                                                             opts = opts
                                                     );
 
-    @test [0.6523; -0.0012;  0.0046; -0.0015;  0.001; -4.6e-5; -0.0005;  0.0012; -0.0004; -0.022] < gnr_fes_res["γ"] <  [0.6524; -0.0001;  0.0048; -0.0014;  0.0012; -4.4e-5; -0.0004;  0.0013; -0.0002; -0.0211]
+    @test round.(gnr_fes_res["γ"], digits = 5) == [0.65239, -0.00112, 0.00476, -0.00146, 0.00111, -5.0e-5, -0.0005, 0.00123, -0.00033, -0.02119]
 
-    @test [ 0.675; -0.002;  0.004; -0.002;  0.001; -4.7e-5; -0.0006;  0.001; -0.002; -0.03] < gnr_fes_res["γ_dash"] < [ 0.676; -0.001;  0.005; -0.001;  0.002; -4.5e-5; -0.0004;  0.002; -0.0001; -0.02]
+    @test round.(gnr_fes_res["γ_dash"], digits = 5) == [0.6759, -0.00116, 0.00494, -0.00152, 0.00115, -5.0e-5, -0.00052, 0.00128, -0.00035, -0.02195]
 
-    @test [ 0.65; -0.0001;  0.001; -0.002;  0.0001; -1.9e-5; -0.0009;  0.01; -0.001; -0.02] <gnr_fes_res["γ_flex"] < [ 0.66; -0.001;  0.002; -0.001;  0.001; -1.0e-5; -0.0001;  0.001; -0.0001; -0.005]
+    @test round.(gnr_fes_res["γ_flex"], digits = 5) == [0.65239, -0.00037, 0.00159, -0.00146, 0.00055, -1.0e-5, -0.0005, 0.00062, -0.00033, -0.01059]
 
-    @test 1.035 < gnr_fes_res["E"] < 1.037
+    @test gnr_fes_res["E"] ≈ 1.03604299 rtol = 1e-8
 
     @test Set(gnr_fes_res["polynom_series"]) == Set(Symbol.(["k"; "k⋅k"; "k⋅k⋅k"; "k⋅k⋅i"; "k⋅i"; "k⋅i⋅i"; "i"; "i⋅i"; "i⋅i⋅i"]))
 
@@ -57,9 +55,9 @@ using GNRProdEst, DataFrames, CSV, Test, Optim
 
     @test Optim.converged(gnr_fes_res["fes_optim_results"])
 
-    @test [0.38, -0.02, 0.0001] < gnr_ses_res["α"] < [0.4, -0.03, 0.004]
+    @test round.(gnr_ses_res["α"], digits = 5) == [0.38825, -0.02485, 0.00247]
 
-    @test [0.16; 0.76; 0.06; -0.05] < vec(gnr_ses_res["δ"]) < [0.175; 0.775; 0.07; -0.05]
+    @test round.(vec(gnr_ses_res["δ"]), digits = 4) == [0.168, 0.7691, 0.0654, -0.0398] # 4 digits: δ[4] differs in the 5th digit between a plain run and one under --check-bounds=yes (which Pkg.test uses)
     
     @test Optim.converged(gnr_ses_res["gmm_optim_results"]) 
 
