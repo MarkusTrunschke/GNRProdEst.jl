@@ -8,7 +8,9 @@
 
     @test round.(gnr_fes_res["γ_flex"], digits = 5) == [0.65239, -0.00037, 0.00159, -0.00146, 0.00055, -1.0e-5, -0.0005, 0.00062, -0.00033, -0.01059]
 
-    @test gnr_fes_res["E"] ≈ 1.03604299 rtol = 1e-8
+    # rtol 1e-6, not tighter: E is a numerically estimated constant and its last digits move
+    # with the exact point at which the first stage optimiser stops, which varies by platform
+    @test gnr_fes_res["E"] ≈ 1.03604299 rtol = 1e-6
 end
 
 @testitem "First stage: series and inputs" setup=[ReplicationResults] begin
