@@ -21,3 +21,7 @@ Data/
 
 # Local scratch script for trying the estimator out, not part of the package
 run_example.jl
+
+# Agent instruction files, local only
+CLAUDE.md
+AGENTS.md
